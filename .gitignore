@@ -1,0 +1,21 @@
+# Compiled files
+/build/
+/dist/
+*.class
+
+# NetBeans specific
+/nbproject/private/
+build.xml
+manifest.mf
+nb-configuration.xml
+
+# Libraries (opcional si prefieres gestionarlas con Maven/Gradle - ver explicación abajo)
+# /libs/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log

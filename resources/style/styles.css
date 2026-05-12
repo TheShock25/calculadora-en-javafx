@@ -1,0 +1,288 @@
+/* Estilos globales para la aplicación JavaFX */
+
+.root {
+    -fx-font-family: "Arial", "Segoe UI", sans-serif;
+    -fx-background-color: #F5F6FA;
+}
+
+/* Botones */
+.button {
+    -fx-background-radius: 5;
+    -fx-cursor: hand;
+    -fx-font-weight: bold;
+}
+
+.button:hover {
+    -fx-opacity: 0.9;
+}
+
+.button:pressed {
+    -fx-opacity: 0.8;
+    -fx-translate-y: 1px;
+}
+
+/* Campos de texto */
+.text-field {
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+    -fx-padding: 5;
+}
+
+.text-field:focused {
+    -fx-border-color: #2196F3;
+    -fx-border-width: 2;
+}
+
+/* ComboBox */
+.combo-box {
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+}
+
+.combo-box:hover {
+    -fx-border-color: #2196F3;
+}
+
+/* Tablas */
+.table-view {
+    -fx-background-color: white;
+    -fx-border-color: #E0E0E0;
+    -fx-border-width: 1;
+}
+
+.table-view .column-header {
+    -fx-background-color: linear-gradient(to bottom, #F5F5F5, #E8E8E8);
+    -fx-font-weight: bold;
+    -fx-border-color: #BDBDBD;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: #F5F5F5;
+}
+
+.table-row-cell:hover {
+    -fx-background-color: #E3F2FD;
+}
+
+.table-row-cell:selected {
+    -fx-background-color: #BBDEFB;
+}
+
+.table-cell {
+    -fx-alignment: CENTER;
+    -fx-padding: 5;
+}
+
+/* ScrollPane */
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+
+.scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #BDBDBD;
+    -fx-background-radius: 5;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #9E9E9E;
+}
+
+/* Labels */
+.label {
+    -fx-text-fill: #212121;
+}
+
+.label.header {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.label.subheader {
+    -fx-font-size: 16px;
+    -fx-text-fill: #757575;
+}
+
+/* Tarjetas (Cards) */
+.card {
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 10, 0, 2, 2);
+}
+
+.card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 15, 0, 4, 4);
+}
+
+/* Paneles */
+.panel {
+    -fx-background-color: white;
+    -fx-border-color: #E0E0E0;
+    -fx-border-width: 1;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+    -fx-padding: 15;
+}
+
+/* Alertas y diálogos */
+.alert {
+    -fx-background-color: white;
+}
+
+.alert .header-panel {
+    -fx-background-color: #2196F3;
+}
+
+.alert .header-panel .label {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+/* Tabs */
+.tab-pane {
+    -fx-background-color: white;
+}
+
+.tab {
+    -fx-background-color: #F5F5F5;
+    -fx-border-color: #BDBDBD;
+}
+
+.tab:selected {
+    -fx-background-color: white;
+    -fx-border-color: #2196F3;
+    -fx-border-width: 0 0 2 0;
+}
+
+.tab-label {
+    -fx-font-weight: bold;
+}
+
+/* Spinner */
+.spinner {
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+}
+
+.spinner .text-field {
+    -fx-alignment: center;
+}
+
+/* ProgressBar */
+.progress-bar {
+    -fx-background-radius: 5;
+}
+
+.progress-bar .bar {
+    -fx-background-color: #4CAF50;
+    -fx-background-radius: 5;
+}
+
+/* Tooltips */
+.tooltip {
+    -fx-background-color: rgba(0, 0, 0, 0.8);
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-padding: 8;
+    -fx-background-radius: 5;
+}
+
+/* Separadores */
+.separator {
+    -fx-background-color: #E0E0E0;
+}
+
+/* Menú contextual */
+.context-menu {
+    -fx-background-color: white;
+    -fx-border-color: #BDBDBD;
+}
+
+.menu-item:hover {
+    -fx-background-color: #E3F2FD;
+}
+
+/* CheckBox y RadioButton */
+.check-box, .radio-button {
+    -fx-text-fill: #212121;
+}
+
+.check-box:selected .box, .radio-button:selected .radio {
+    -fx-background-color: #2196F3;
+}
+
+/* Slider */
+.slider .track {
+    -fx-background-color: #E0E0E0;
+}
+
+.slider .thumb {
+    -fx-background-color: #2196F3;
+}
+
+/* Animaciones */
+@keyframes fade-in {
+    from { -fx-opacity: 0; }
+    to { -fx-opacity: 1; }
+}
+
+@keyframes slide-in {
+    from { -fx-translate-y: -20px; -fx-opacity: 0; }
+    to { -fx-translate-y: 0; -fx-opacity: 1; }
+}
+
+/* Clases de utilidad */
+.success {
+    -fx-background-color: #4CAF50;
+    -fx-text-fill: white;
+}
+
+.warning {
+    -fx-background-color: #FF9800;
+    -fx-text-fill: white;
+}
+
+.error {
+    -fx-background-color: #F44336;
+    -fx-text-fill: white;
+}
+
+.info {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+}
+
+.primary {
+    -fx-background-color: #1976D2;
+    -fx-text-fill: white;
+}
+
+.secondary {
+    -fx-background-color: #757575;
+    -fx-text-fill: white;
+}
+
+/* Responsive utilities */
+.tablet-mode .label.header {
+    -fx-font-size: 20px;
+}
+
+.tablet-mode .button {
+    -fx-padding: 8 16;
+}
+
+.desktop-mode .label.header {
+    -fx-font-size: 24px;
+}
+
+.desktop-mode .button {
+    -fx-padding: 10 20;
+}
