@@ -1,1001 +1,1637 @@
 package calculadoraenergeticamodernaa;
 
 import javafx.application.Application;
+import static javafx.application.Application.launch;
+import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.scene.control.cell.CheckBoxTableCell;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.IntegerProperty;
-import javafx.beans.property.SimpleIntegerProperty;
-import javafx.beans.property.SimpleStringProperty;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.*;
-import javafx.scene.text.Font;
-import javafx.stage.FileChooser;
-import javafx.stage.Stage;
 import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontPosture;
+import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
+import javafx.stage.Screen;
+import javafx.stage.Stage;
+
+import java.io.*;
+import java.text.DecimalFormat;
+import java.text.Normalizer;
+import java.util.*;
+import java.util.regex.Pattern;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import java.io.InputStream;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.*;
-
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import javafx.application.Application;
-import static javafx.application.Application.launch;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.IntegerProperty;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleIntegerProperty;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Spinner;
-import javafx.scene.control.TableCell;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
-import javafx.scene.control.TitledPane;
-import javafx.scene.control.cell.CheckBoxTableCell;
-import javafx.scene.layout.Background;
-import javafx.scene.layout.BackgroundFill;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.CornerRadii;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.stage.FileChooser;
-import javafx.stage.Stage;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
 /**
- * Versión migrada (simplificada) de PlanAlimenticio usando JavaFX.
- * Contiene una estructura equivalente: encabezado, secciones en VBox,
- * tablas con datos de ejemplo y estilos consistentes.
+ * Plan Alimenticio Personalizado (JavaFX)
+ * Planificación dietética clínica por grupos prescritos del SMAE y Platillos Mexicanos.
+ * Incluye:
+ * - Centrado proporcional dinámico de columnas de grupos
+ * - Regla estricta de cuota diaria de porciones por grupo alimenticio
+ * - Dimensionamiento adaptativo a la pantalla
+ * - Paleta institucional Verde y Blanca
  */
 public class PlanAlimenticio extends Application {
 
-    private static final Color PRIMARY_COLOR = Color.web("#2980b9");
-    private static final Color BACKGROUND_COLOR = Color.web("#f5f6fa");
-    private static final String FONT_FAMILY = "Segoe UI";
+    // Paleta oficial: Verdes y Blancos de alta legibilidad
+    private static final Color PRIMARY_GREEN = Color.web("#2E7D32");       // Verde esmeralda principal
+    private static final Color SECONDARY_GREEN = Color.web("#388E3C");     // Verde medio
+    private static final Color DARK_FOREST = Color.web("#1B5E20");         // Verde bosque profundo
+    private static final Color LIGHT_MINT = Color.web("#E8F5E9");          // Fondo verde menta suave
+    private static final Color BORDER_GREEN = Color.web("#C8E6C9");        // Borde verde suave
+    private static final Color TEXT_DARK = Color.web("#1C2D27");           // Texto oscuro
+    private static final Color TEXT_MUTED = Color.web("#4A6356");          // Texto secundario
 
-    private java.util.List<java.util.Map<String, Object>> selectedEquivalentes;
-    // Map grupo -> lista de alimentos (loaded from SMAE Excel)
+    // Componentes principales
+    private TableView<NutrienteItem> tablaNutrientesGramos;
+    private TableView<NutrienteItem> tablaPorcentajes;
+    private Label totalKcalLabel;
+    private Label estadoCargaLabel;
+    private ProgressBar barraProgreso;
+    private ScrollPane scrollPrincipal;
+
+    // Valores ideales u objetivos
+    private double idealHc = 0;
+    private double idealLipidos = 0;
+    private double idealProteinas = 0;
+    private double kcalObjetivo = 0;
+
+    // Totales calculados en tiempo real
+    private double totalHc = 0;
+    private double totalLipidos = 0;
+    private double totalProteinas = 0;
+
+    // Grupos prescritos y porciones objetivo
+    private List<String> gruposEspecificos = new ArrayList<>();
+    private List<Integer> porcionesObjetivo = new ArrayList<>();
+
+    // Mapas de datos y caché de listas
     private Map<String, List<String>> datosExcel = new HashMap<>();
-
-    // Mapping names used in the Excel similar to RecordatorioFX
-    private Map<String, List<String>> nombreExcel = new HashMap<>();
-
-    // Nutrient maps: alimento -> {"HC":x, "Lípidos":y, "Proteínas":z}
+    private Map<String, ObservableList<String>> cachedListasAlimentos = new HashMap<>();
     private Map<String, Map<String, Double>> nutrientesAlimentos = new HashMap<>();
     private Map<String, Map<String, Double>> nutrientesPlatillos = new HashMap<>();
+    private ObservableList<String> listaPlatillos = FXCollections.observableArrayList();
 
-    // UI state: map grupo -> list of ItemRow controls
-    private Map<String, List<ItemRow>> grupoItemRows = new HashMap<>();
-    // Persistent model: map grupo -> list of ItemModel (source of truth for
-    // selection/porciones)
-    private Map<String, List<ItemModel>> grupoModelRows = new HashMap<>();
+    // Matrices de estado para cada comida (6 filas x N grupos)
+    private String[][] alimentosEnDesayuno;
+    private int[][] porcionesEnDesayuno;
+    private String[][] alimentosEnComida;
+    private int[][] porcionesEnComida;
+    private String[][] alimentosEnCena;
+    private int[][] porcionesEnCena;
 
-    // UI fields for export and global platillos
-    private TableView<Alimento> summaryTableField;
-    private Label totalesLabelField;
-    private List<String> listaPlatillosGlobal = new ArrayList<>();
+    // Controladores de slots registrados para actualización de cuota
+    private Map<Integer, List<SlotControl>> controlesPorGrupo = new HashMap<>();
+    private Map<Integer, Label> badgePorcionesPorGrupo = new HashMap<>();
 
-    private double kcalDiariasObjetivo;
+    // 4 slots de platillos específicos por comida
+    private Map<String, List<PlatilloSeleccionado>> platillosEspecificosSeleccionados = new HashMap<>();
+
+    private DecimalFormat df = new DecimalFormat("#.##");
 
     public PlanAlimenticio() {
-        this.selectedEquivalentes = null;
-        this.kcalDiariasObjetivo = 2000.0; // valor por defecto
+        this(0, 0, 0, new ArrayList<>(), new ArrayList<>());
     }
 
-    // NUEVO CONSTRUCTOR con Kcal diarias
-    public PlanAlimenticio(java.util.List<java.util.Map<String,Object>> selectedEquivalentes, double kcalDiarias) {
-        this.selectedEquivalentes = selectedEquivalentes;
-        this.kcalDiariasObjetivo = kcalDiarias;
+    public PlanAlimenticio(double hc, double lipidos, double proteinas, List<String> grupos, List<Integer> porciones) {
+        this.idealHc = hc;
+        this.idealLipidos = lipidos;
+        this.idealProteinas = proteinas;
+        this.kcalObjetivo = (hc * 4.0) + (proteinas * 4.0) + (lipidos * 9.0);
+        this.gruposEspecificos = sanitizarGrupos(grupos);
+        this.porcionesObjetivo = (porciones != null) ? new ArrayList<>(porciones) : new ArrayList<>();
+
+        inicializarEstructuras();
+    }
+
+    public PlanAlimenticio(double hc, double lipidos, double proteinas, List<Map<String, Object>> seleccionEquivalentes, double kcalDiarias) {
+        this.idealHc = hc;
+        this.idealLipidos = lipidos;
+        this.idealProteinas = proteinas;
+        this.kcalObjetivo = kcalDiarias;
+        this.gruposEspecificos = new ArrayList<>();
+        this.porcionesObjetivo = new ArrayList<>();
+
+        if (seleccionEquivalentes != null && !seleccionEquivalentes.isEmpty()) {
+            for (Map<String, Object> item : seleccionEquivalentes) {
+                String g = (String) item.get("grupo");
+                String sub = (String) item.get("subgrupo");
+                int porc = (item.get("porciones") instanceof Number) ? ((Number) item.get("porciones")).intValue() : 1;
+
+                if (g != null) g = g.trim();
+                if (sub != null) sub = sub.trim();
+
+                String nombreCompleto = g;
+                if (sub != null && !sub.isEmpty() && !sub.equalsIgnoreCase(g)) {
+                    nombreCompleto = g + " - " + sub;
+                }
+
+                if (nombreCompleto != null && !nombreCompleto.isEmpty() && !this.gruposEspecificos.contains(nombreCompleto)) {
+                    this.gruposEspecificos.add(nombreCompleto);
+                    this.porcionesObjetivo.add(porc);
+                }
+            }
+        }
+
+        if (this.gruposEspecificos.isEmpty()) {
+            this.gruposEspecificos = obtenerGruposPorDefecto();
+        }
+
+        inicializarEstructuras();
+    }
+
+    public PlanAlimenticio(List<Map<String, Object>> seleccionEquivalentes, double kcalDiarias) {
+        this(0, 0, 0, seleccionEquivalentes, kcalDiarias);
+    }
+
+    private List<String> sanitizarGrupos(List<String> grupos) {
+        if (grupos == null || grupos.isEmpty()) {
+            return obtenerGruposPorDefecto();
+        }
+        List<String> resultado = new ArrayList<>();
+        for (String g : grupos) {
+            if (g != null && !g.trim().isEmpty()) {
+                String limpio = g.trim();
+                if (limpio.endsWith(" -")) {
+                    limpio = limpio.substring(0, limpio.length() - 2).trim();
+                }
+                if (!resultado.contains(limpio)) {
+                    resultado.add(limpio);
+                }
+            }
+        }
+        return resultado.isEmpty() ? obtenerGruposPorDefecto() : resultado;
+    }
+
+    private List<String> obtenerGruposPorDefecto() {
+        return Arrays.asList(
+            "Verduras", "Frutas", "Cereales y tubérculos - Sin Grasa", "Cereales y tubérculos - Con Grasa",
+            "Leguminosas", "Alimentos de origen animal - MBAG", "Alimentos de origen animal - BAG",
+            "Alimentos de origen animal - MAG", "Alimentos de origen animal - AAG", "Leche - Descremada",
+            "Leche - Semi", "Leche - Entera", "Leche - Con Azucar", "Aceite y grasa - Sin proteina",
+            "Aceite y grasa - Con proteina", "Azucar - Sin grasa", "Azucar - Con grasa"
+        );
+    }
+
+    private void inicializarEstructuras() {
+        int nGrupos = Math.max(1, gruposEspecificos.size());
+
+        alimentosEnDesayuno = new String[6][nGrupos];
+        porcionesEnDesayuno = new int[6][nGrupos];
+        alimentosEnComida = new String[6][nGrupos];
+        porcionesEnComida = new int[6][nGrupos];
+        alimentosEnCena = new String[6][nGrupos];
+        porcionesEnCena = new int[6][nGrupos];
+
+        for (int r = 0; r < 6; r++) {
+            for (int c = 0; c < nGrupos; c++) {
+                alimentosEnDesayuno[r][c] = "";
+                porcionesEnDesayuno[r][c] = 1;
+                alimentosEnComida[r][c] = "";
+                porcionesEnComida[r][c] = 1;
+                alimentosEnCena[r][c] = "";
+                porcionesEnCena[r][c] = 1;
+            }
+        }
+
+        String[] comidas = { "DESAYUNO", "COMIDA", "CENA" };
+        for (String c : comidas) {
+            List<PlatilloSeleccionado> slots = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                slots.add(new PlatilloSeleccionado("", 1));
+            }
+            platillosEspecificosSeleccionados.put(c, slots);
+        }
+
+        for (int i = 0; i < gruposEspecificos.size(); i++) {
+            String g = gruposEspecificos.get(i);
+            ObservableList<String> items = FXCollections.observableArrayList();
+            items.add("");
+            cachedListasAlimentos.put(g, items);
+            controlesPorGrupo.put(i, new ArrayList<>());
+        }
     }
 
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("Plan Alimenticio - JavaFX (migrado) - " + String.format("%,.0f kcal", kcalDiariasObjetivo));
+        primaryStage.setTitle("NutriEnergia Pro - Plan Alimenticio Personalizado");
+
+        // Registrar en WindowManager para asegurar instancia única y soporte de cierre maestro
+        WindowManager.registrarVentana("PlanAlimenticio", primaryStage);
 
         BorderPane root = new BorderPane();
-        root.setBackground(new Background(new BackgroundFill(BACKGROUND_COLOR, CornerRadii.EMPTY, Insets.EMPTY)));
+        root.setStyle("-fx-background-color: #F4F7F5;");
 
-        // Encabezado
-        Label title = new Label("Plan Alimenticio");
-        title.setFont(Font.font(FONT_FAMILY, 20));
-        title.setTextFill(javafx.scene.paint.Color.web("#2c3e50"));
-
-        Button verPlatillosBtn = new Button("Ver platillos específicos");
-        verPlatillosBtn.setOnAction(e -> mostrarPlatillosEspecificos(listaPlatillosGlobal));
-
-        Button exportBtn = new Button("Exportar a TXT");
-        exportBtn.setOnAction(e -> exportarATXTPlan());
-
-        Region spacerHeader = new Region();
-        HBox.setHgrow(spacerHeader, Priority.ALWAYS);
-
-        HBox header = new HBox(10, title, spacerHeader, verPlatillosBtn, exportBtn);
-        header.setPadding(new Insets(12));
-        header.setAlignment(Pos.CENTER_LEFT);
-        header.setStyle("-fx-background-color: white; -fx-border-color: #e5e7eb; -fx-border-width: 0 0 1 0;");
-
+        // Header institucional
+        VBox header = crearHeader();
         root.setTop(header);
 
-        // Contenido principal (scrollable)
-        ScrollPane scroll = new ScrollPane();
-        scroll.setFitToWidth(true);
-        VBox content = new VBox(12);
-        content.setPadding(new Insets(16));
-        content.setPrefWidth(800);
+        // Centro con scroll fluido
+        scrollPrincipal = crearPanelCentral();
+        root.setCenter(scrollPrincipal);
 
-        // Sección: Parámetros básicos (simulada con GridPane)
-        content.getChildren().add(createParametrosBasicosSection());
+        // Footer con botones de acción
+        HBox footer = crearFooter();
+        root.setBottom(footer);
 
-        // Sección: Tabla de alimentos (TableView)
-        try {
-            inicializarMapeoExcel();
-            cargarDatosExcel();
-        } catch (Exception e) {
-            e.printStackTrace();
+        // Ajustar dimensiones para que quepa perfectamente en pantalla
+        double screenW = Screen.getPrimary().getVisualBounds().getWidth();
+        double screenH = Screen.getPrimary().getVisualBounds().getHeight();
+
+        double width = Math.min(1160, screenW - 40);
+        double height = Math.min(700, screenH - 50);
+
+        Scene scene = new Scene(root, width, height);
+        cargarCSS(scene);
+
+        primaryStage.setScene(scene);
+        primaryStage.setMinWidth(920);
+        primaryStage.setMinHeight(560);
+        primaryStage.centerOnScreen();
+        primaryStage.show();
+
+        // Iniciar carga asíncrona de datos en hilo de fondo
+        iniciarCargaAsincrona();
+    }
+
+    private void cargarCSS(Scene scene) {
+        String[] posiblesRutas = {
+            "/style/styles.css",
+            "style/styles.css",
+            "resources/style/styles.css",
+            "/styles.css",
+            "styles.css"
+        };
+
+        for (String ruta : posiblesRutas) {
+            try {
+                java.net.URL cssUrl = getClass().getResource(ruta);
+                if (cssUrl != null) {
+                    scene.getStylesheets().add(cssUrl.toExternalForm());
+                    break;
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private VBox crearHeader() {
+        VBox header = new VBox(6);
+        header.setAlignment(Pos.CENTER);
+        header.setStyle(
+            "-fx-background-color: linear-gradient(to right, #1B5E20, #2E7D32, #388E3C); " +
+            "-fx-background-radius: 0 0 12 12;"
+        );
+        header.setPadding(new Insets(8, 16, 8, 16));
+
+        // Fila 1: Badge y Título
+        HBox topRow = new HBox(10);
+        topRow.setAlignment(Pos.CENTER);
+
+        Label badge = new Label("PRESCRIPCION NUTRICIONAL");
+        badge.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10));
+        badge.setTextFill(Color.web("#E8F5E9"));
+        badge.setStyle(
+            "-fx-background-color: rgba(255, 255, 255, 0.2); " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 2 7;"
+        );
+
+        Label titulo = new Label("Plan Alimenticio Personalizado");
+        titulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 17));
+        titulo.setTextFill(Color.WHITE);
+
+        topRow.getChildren().addAll(badge, titulo);
+
+        // Fila 2: Chips de Metas Dietéticas y Progreso
+        HBox metricsRow = new HBox(12);
+        metricsRow.setAlignment(Pos.CENTER);
+
+        Label idealChip = crearChipMetrica("OBJETIVOS DIETETICOS",
+            String.format("HC: %.1fg | Lip: %.1fg | Prot: %.1fg", idealHc, idealLipidos, idealProteinas));
+
+        if (kcalObjetivo > 0) {
+            Label kcalChip = crearChipMetrica("META CALORICA", String.format("%.0f kcal/dia", kcalObjetivo));
+            metricsRow.getChildren().add(kcalChip);
         }
 
-        content.getChildren().add(createTablaAlimentosSection());
+        totalKcalLabel = crearChipMetrica("ENERGIA CONSUMIDA", "0.0 kcal");
 
-        // Sección: Resumen/calorías
-        content.getChildren().add(createResumenSection());
+        HBox cargaBox = new HBox(6);
+        cargaBox.setAlignment(Pos.CENTER);
 
-        scroll.setContent(content);
-        root.setCenter(scroll);
+        estadoCargaLabel = new Label("Cargando SMAE y Platillos...");
+        estadoCargaLabel.setFont(Font.font("Segoe UI", FontWeight.NORMAL, 10.5));
+        estadoCargaLabel.setTextFill(Color.web("#C8E6C9"));
 
-        Scene scene = new Scene(root, 900, 650);
-        primaryStage.setScene(scene);
-        primaryStage.show();
+        barraProgreso = new ProgressBar();
+        barraProgreso.setPrefWidth(80);
+        barraProgreso.setPrefHeight(9);
+        barraProgreso.setStyle("-fx-accent: #81C784;");
+
+        cargaBox.getChildren().addAll(estadoCargaLabel, barraProgreso);
+
+        metricsRow.getChildren().addAll(idealChip, totalKcalLabel, cargaBox);
+
+        header.getChildren().addAll(topRow, metricsRow);
+        header.setEffect(new DropShadow(8, 0, 2, Color.rgb(0, 0, 0, 0.12)));
+
+        return header;
     }
 
-    private Region createParametrosBasicosSection() {
-        VBox box = new VBox(8);
-        box.setPadding(new Insets(12));
-        box.setStyle(
-                "-fx-background-color: white; -fx-effect: dropshadow(two-pass-box, rgba(0,0,0,0.03), 8, 0, 0, 1); -fx-border-radius: 8; -fx-background-radius: 8;");
-
-        Label h = new Label("Parámetros básicos");
-        h.setFont(Font.font(FONT_FAMILY, 16));
-
-        GridPane grid = new GridPane();
-        grid.setHgap(12);
-        grid.setVgap(8);
-        grid.setPadding(new Insets(4));
-
-        grid.add(new Label("Edad:"), 0, 0);
-        grid.add(new Label("30 años"), 1, 0);
-
-        grid.add(new Label("Sexo:"), 0, 1);
-        grid.add(new Label("Masculino"), 1, 1);
-
-        grid.add(new Label("Peso:"), 0, 2);
-        grid.add(new Label("75 kg"), 1, 2);
-
-        grid.add(new Label("Altura:"), 0, 3);
-        grid.add(new Label("175 cm"), 1, 3);
-
-        box.getChildren().addAll(h, grid);
-        return box;
+    private Label crearChipMetrica(String titulo, String valor) {
+        Label chip = new Label(titulo + ": " + valor);
+        chip.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10.5));
+        chip.setTextFill(Color.WHITE);
+        chip.setAlignment(Pos.CENTER);
+        chip.setStyle(
+            "-fx-background-color: rgba(0, 0, 0, 0.22); " +
+            "-fx-border-color: rgba(255, 255, 255, 0.3); " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 6; " +
+            "-fx-background-radius: 6; " +
+            "-fx-padding: 3 8;"
+        );
+        return chip;
     }
 
-    private Region createTablaAlimentosSection() {
-        VBox box = new VBox(8);
-        box.setPadding(new Insets(12));
-        box.setStyle(
-                "-fx-background-color: white; -fx-effect: dropshadow(two-pass-box, rgba(0,0,0,0.03), 8, 0, 0, 1); -fx-border-radius: 8; -fx-background-radius: 8;");
+    private ScrollPane crearPanelCentral() {
+        VBox mainContainer = new VBox(14);
+        mainContainer.setAlignment(Pos.TOP_CENTER);
+        mainContainer.setPadding(new Insets(12, 14, 20, 14));
 
-        Label h = new Label("Alimentos / Plan");
-        h.setFont(Font.font(FONT_FAMILY, 16));
+        // 1. Resumen de Grupos Prescritos (Chips)
+        if (!gruposEspecificos.isEmpty()) {
+            VBox prescripcionBox = crearSeccionPrescripcion();
+            mainContainer.getChildren().add(prescripcionBox);
+        }
 
-        // If selectedEquivalentes provided, create a panel per grupo
-        VBox gruposContainer = new VBox(8);
-        gruposContainer.setId("gruposContainer");
-        // Filter controls: subgrupo selector
-        HBox filtroBox = new HBox(8);
-        filtroBox.setAlignment(Pos.CENTER_LEFT);
-        ComboBox<String> comboSubgrupo = new ComboBox<>();
-        comboSubgrupo.setEditable(true);
-        // fill with possible sheet names / grupos
-        comboSubgrupo.getItems().addAll(datosExcel.keySet());
-        comboSubgrupo.setPromptText("Ingrese o seleccione subgrupo...");
-        Button mostrarBtn = new Button("Mostrar");
-        Button mostrarTodosBtn = new Button("Mostrar todos");
-        filtroBox.getChildren().addAll(new Label("Subgrupo:"), comboSubgrupo, mostrarBtn, mostrarTodosBtn);
-        // Place filter box above gruposContainer
-        VBox containerWrapper = new VBox(6, filtroBox, gruposContainer);
-        // Ensure platillos CSV is loaded for 'Ver platillos' modal
-        listaPlatillosGlobal = cargarPlatillosCSV();
+        // 2. Platillos Tradicionales Mexicanos
+        VBox platillosSeccion = crearSeccionPlatillos();
 
-        // function to (re)populate gruposContainer based on a collection of grupos
-        java.util.function.Consumer<Collection<String>> populateGrupos = (grupos) -> {
-            gruposContainer.getChildren().clear();
-            for (String grupo : grupos) {
-                List<String> alimentos = datosExcel.getOrDefault(grupo, List.of());
-                VBox contenido = createGrupoAlimentosPanel(grupo, alimentos);
-                TitledPane tp = new TitledPane(grupo + " (" + alimentos.size() + ")", contenido);
-                tp.setCollapsible(true);
-                gruposContainer.getChildren().add(tp);
+        // 3. Tablas de Comidas con Grupos Prescritos (Desayuno, Comida, Cena)
+        VBox comidasSeccion = crearSeccionComidas();
+
+        // 4. Tablas Finales: 'Nutrientes Actuales (g)' y 'Porcentaje de Nutrientes (%)'
+        VBox resumenNutrientesSeccion = crearSeccionResumenNutrientes();
+
+        mainContainer.getChildren().addAll(platillosSeccion, comidasSeccion, resumenNutrientesSeccion);
+
+        ScrollPane scroll = new ScrollPane(mainContainer);
+        scroll.setFitToWidth(true);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+
+        return scroll;
+    }
+
+    private VBox crearSeccionPrescripcion() {
+        VBox container = new VBox(5);
+        container.setAlignment(Pos.TOP_LEFT);
+
+        Label secTitle = new Label("GRUPOS ALIMENTARIOS PRESCRITOS");
+        secTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11));
+        secTitle.setTextFill(PRIMARY_GREEN);
+
+        FlowPane chipsPane = new FlowPane(6, 6);
+        chipsPane.setPadding(new Insets(5, 8, 5, 8));
+        chipsPane.setStyle(
+            "-fx-background-color: white; " +
+            "-fx-border-color: #E2E8E4; " +
+            "-fx-border-width: 1.5; " +
+            "-fx-border-radius: 8; " +
+            "-fx-background-radius: 8;"
+        );
+
+        for (int i = 0; i < gruposEspecificos.size(); i++) {
+            String g = gruposEspecificos.get(i);
+            int porc = (i < porcionesObjetivo.size()) ? porcionesObjetivo.get(i) : 1;
+
+            Label chip = new Label(g + " (" + porc + " porc.)");
+            chip.setFont(Font.font("Segoe UI", FontWeight.BOLD, 9.5));
+            chip.setTextFill(DARK_FOREST);
+            chip.setStyle(
+                "-fx-background-color: #E8F5E9; " +
+                "-fx-border-color: #C8E6C9; " +
+                "-fx-border-width: 1; " +
+                "-fx-border-radius: 10; " +
+                "-fx-background-radius: 10; " +
+                "-fx-padding: 2 7;"
+            );
+            chipsPane.getChildren().add(chip);
+        }
+
+        container.getChildren().addAll(secTitle, chipsPane);
+        return container;
+    }
+
+    private VBox crearSeccionPlatillos() {
+        VBox container = new VBox(5);
+        container.setAlignment(Pos.TOP_LEFT);
+
+        Label secTitle = new Label("1. PLATILLOS MEXICANOS TRADICIONALES");
+        secTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11.5));
+        secTitle.setTextFill(PRIMARY_GREEN);
+
+        HBox cardsBox = new HBox(10);
+        cardsBox.setAlignment(Pos.CENTER);
+
+        VBox cardDesayuno = crearTarjetaPlatillo("DESAYUNO", "#2E7D32");
+        VBox cardComida = crearTarjetaPlatillo("COMIDA", "#1B5E20");
+        VBox cardCena = crearTarjetaPlatillo("CENA", "#388E3C");
+
+        HBox.setHgrow(cardDesayuno, Priority.ALWAYS);
+        HBox.setHgrow(cardComida, Priority.ALWAYS);
+        HBox.setHgrow(cardCena, Priority.ALWAYS);
+
+        cardsBox.getChildren().addAll(cardDesayuno, cardComida, cardCena);
+        container.getChildren().addAll(secTitle, cardsBox);
+        return container;
+    }
+
+    private VBox crearTarjetaPlatillo(String comida, String hexColor) {
+        VBox card = new VBox(5);
+        card.setStyle(
+            "-fx-background-color: white; " +
+            "-fx-border-color: #E2E8E4; " +
+            "-fx-border-width: 1.5; " +
+            "-fx-border-radius: 8; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 8 10;"
+        );
+        card.setEffect(new DropShadow(5, 0, 2, Color.rgb(0, 0, 0, 0.04)));
+
+        HBox header = new HBox(6);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setStyle(
+            "-fx-background-color: " + hexColor + "; " +
+            "-fx-background-radius: 6; " +
+            "-fx-padding: 4 8;"
+        );
+
+        Label labelComida = new Label("PLATILLOS EN " + comida);
+        labelComida.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10.5));
+        labelComida.setTextFill(Color.WHITE);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button btnVerTodos = new Button("Ver Todos");
+        btnVerTodos.setFont(Font.font("Segoe UI", FontWeight.BOLD, 9));
+        btnVerTodos.setTextFill(DARK_FOREST);
+        btnVerTodos.setStyle(
+            "-fx-background-color: #E8F5E9; " +
+            "-fx-background-radius: 4; " +
+            "-fx-padding: 2 6; " +
+            "-fx-cursor: hand;"
+        );
+        btnVerTodos.setOnAction(e -> mostrarPlatillosModal());
+
+        header.getChildren().addAll(labelComida, spacer, btnVerTodos);
+
+        VBox slotsContainer = new VBox(4);
+        List<PlatilloSeleccionado> slots = platillosEspecificosSeleccionados.get(comida);
+
+        for (int i = 0; i < 4; i++) {
+            final int index = i;
+            HBox slotRow = new HBox(5);
+            slotRow.setAlignment(Pos.CENTER_LEFT);
+
+            Label slotNum = new Label((i + 1) + ".");
+            slotNum.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10));
+            slotNum.setTextFill(TEXT_MUTED);
+            slotNum.setMinWidth(12);
+
+            ComboBox<String> combo = new ComboBox<>();
+            combo.setPromptText("Elegir platillo...");
+            combo.setItems(listaPlatillos);
+            combo.setMaxWidth(Double.MAX_VALUE);
+            HBox.setHgrow(combo, Priority.ALWAYS);
+            estilizarControl(combo);
+
+            Spinner<Integer> spinner = new Spinner<>(1, 10, 1);
+            spinner.setPrefWidth(52);
+            spinner.setEditable(true);
+            estilizarControl(spinner);
+
+            // Listener combo
+            combo.valueProperty().addListener((obs, oldV, newV) -> {
+                String platillo = newV != null ? newV : "";
+                int porc = spinner.getValue() != null ? spinner.getValue() : 1;
+                slots.set(index, new PlatilloSeleccionado(platillo, porc));
+                recalcularTotalesGenerales();
+            });
+
+            // Listener spinner
+            spinner.valueProperty().addListener((obs, oldV, newV) -> {
+                String platillo = combo.getValue() != null ? combo.getValue() : "";
+                int porc = newV != null ? newV : 1;
+                slots.set(index, new PlatilloSeleccionado(platillo, porc));
+                recalcularTotalesGenerales();
+            });
+
+            slotRow.getChildren().addAll(slotNum, combo, spinner);
+            slotsContainer.getChildren().add(slotRow);
+        }
+
+        card.getChildren().addAll(header, slotsContainer);
+        return card;
+    }
+
+    private void estilizarControl(Control control) {
+        control.setStyle(
+            "-fx-background-color: white; " +
+            "-fx-border-color: #C8E6C9; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 4; " +
+            "-fx-background-radius: 4; " +
+            "-fx-font-size: 10.5px;"
+        );
+    }
+
+    private VBox crearSeccionComidas() {
+        VBox container = new VBox(10);
+        container.setAlignment(Pos.TOP_LEFT);
+
+        Label secTitle = new Label("2. DISTRIBUCION DE ALIMENTOS EN EL PLAN DIETETICO (" + gruposEspecificos.size() + " GRUPOS)");
+        secTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11.5));
+        secTitle.setTextFill(PRIMARY_GREEN);
+
+        VBox desContainer = crearContenedorComida("DESAYUNO", "#2E7D32", 0);
+        VBox comContainer = crearContenedorComida("COMIDA", "#1B5E20", 1);
+        VBox cenContainer = crearContenedorComida("CENA", "#388E3C", 2);
+
+        container.getChildren().addAll(secTitle, desContainer, comContainer, cenContainer);
+        return container;
+    }
+
+    private VBox crearContenedorComida(String titulo, String hexColor, int comidaIdx) {
+        VBox card = new VBox(5);
+        card.setStyle(
+            "-fx-background-color: white; " +
+            "-fx-border-color: #E2E8E4; " +
+            "-fx-border-width: 1.5; " +
+            "-fx-border-radius: 8; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 7 9;"
+        );
+        card.setEffect(new DropShadow(5, 0, 2, Color.rgb(0, 0, 0, 0.04)));
+
+        HBox header = new HBox(8);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setStyle(
+            "-fx-background-color: " + hexColor + "; " +
+            "-fx-background-radius: 6; " +
+            "-fx-padding: 5 8;"
+        );
+
+        Label labelTitulo = new Label(titulo);
+        labelTitulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11));
+        labelTitulo.setTextFill(Color.WHITE);
+
+        String infoText = gruposEspecificos.size() <= 4
+            ? "✓ " + gruposEspecificos.size() + " grupo(s) prescrito(s)"
+            : "← Desplaza horizontalmente para ver todos los grupos (" + gruposEspecificos.size() + ") →";
+
+        Label labelInfo = new Label(infoText);
+        labelInfo.setFont(Font.font("Segoe UI", FontWeight.NORMAL, 9.5));
+        labelInfo.setTextFill(Color.web("#C8E6C9"));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        header.getChildren().addAll(labelTitulo, spacer, labelInfo);
+
+        // Contenedor de columnas: CENTRADO si hay 4 grupos o menos, ALINEADO A LA IZQUIERDA con scroll si hay más
+        HBox columnasBox = new HBox(12);
+        columnasBox.setPadding(new Insets(6));
+
+        boolean pocosGrupos = gruposEspecificos.size() <= 4;
+        columnasBox.setAlignment(pocosGrupos ? Pos.CENTER : Pos.CENTER_LEFT);
+
+        // Calcular ancho dinámico proporcional de tarjeta
+        double cardWidth;
+        if (gruposEspecificos.size() == 1) {
+            cardWidth = 320;
+        } else if (gruposEspecificos.size() == 2) {
+            cardWidth = 280;
+        } else if (gruposEspecificos.size() == 3) {
+            cardWidth = 260;
+        } else {
+            cardWidth = 240;
+        }
+
+        for (int colIndex = 0; colIndex < gruposEspecificos.size(); colIndex++) {
+            String grupo = gruposEspecificos.get(colIndex);
+            VBox colCard = crearTarjetaColumnaGrupo(grupo, hexColor, comidaIdx, colIndex, cardWidth);
+            columnasBox.getChildren().add(colCard);
+        }
+
+        ScrollPane scrollH = new ScrollPane(columnasBox);
+        scrollH.setFitToHeight(true);
+        scrollH.setFitToWidth(pocosGrupos);
+        scrollH.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        scrollH.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollH.setHbarPolicy(pocosGrupos ? ScrollPane.ScrollBarPolicy.NEVER : ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        // Redirigir eventos de scroll vertical al scroll principal
+        scrollH.addEventFilter(ScrollEvent.SCROLL, event -> {
+            if (event.getDeltaY() != 0 && Math.abs(event.getDeltaY()) > Math.abs(event.getDeltaX())) {
+                if (scrollPrincipal != null) {
+                    double delta = event.getDeltaY();
+                    scrollPrincipal.setVvalue(scrollPrincipal.getVvalue() - delta / 350.0);
+                    event.consume();
+                }
+            }
+        });
+
+        card.getChildren().addAll(header, scrollH);
+        return card;
+    }
+
+    private VBox crearTarjetaColumnaGrupo(String grupo, String hexColor, int comidaIdx, int colIndex, double cardWidth) {
+        VBox card = new VBox(5);
+        card.setStyle(
+            "-fx-background-color: #FAFCFA; " +
+            "-fx-border-color: #C8E6C9; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 8; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 6 8;"
+        );
+        card.setPrefWidth(cardWidth);
+        card.setMinWidth(210);
+
+        // Encabezado de grupo
+        VBox headerBox = new VBox(2);
+        headerBox.setAlignment(Pos.CENTER);
+        headerBox.setStyle(
+            "-fx-background-color: " + hexColor + "; " +
+            "-fx-padding: 4 6; " +
+            "-fx-background-radius: 6;"
+        );
+
+        String[] partes = grupo.split(" - ");
+        Label mainLabel = new Label(partes[0].trim());
+        mainLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10.5));
+        mainLabel.setTextFill(Color.WHITE);
+        mainLabel.setAlignment(Pos.CENTER);
+
+        headerBox.getChildren().add(mainLabel);
+
+        if (partes.length > 1) {
+            Label subLabel = new Label(partes[1].trim());
+            subLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 9));
+            subLabel.setTextFill(Color.web("#E8F5E9"));
+            subLabel.setStyle(
+                "-fx-background-color: rgba(255, 255, 255, 0.22); " +
+                "-fx-background-radius: 3; " +
+                "-fx-padding: 1 4;"
+            );
+            subLabel.setAlignment(Pos.CENTER);
+            headerBox.getChildren().add(subLabel);
+        }
+
+        // Badge de Cuota de Porciones
+        int quota = (colIndex < porcionesObjetivo.size()) ? porcionesObjetivo.get(colIndex) : 1;
+        Label quotaBadge = new Label("Prescrito: " + quota + " porc.");
+        quotaBadge.setFont(Font.font("Segoe UI", FontWeight.BOLD, 8.5));
+        quotaBadge.setTextFill(DARK_FOREST);
+        quotaBadge.setStyle(
+            "-fx-background-color: #E8F5E9; " +
+            "-fx-background-radius: 3; " +
+            "-fx-padding: 1 5;"
+        );
+        quotaBadge.setAlignment(Pos.CENTER);
+
+        // Guardar badge para actualización reactiva
+        if (comidaIdx == 0) {
+            badgePorcionesPorGrupo.put(colIndex, quotaBadge);
+        }
+
+        headerBox.getChildren().add(quotaBadge);
+
+        VBox rowsContainer = new VBox(4);
+        ObservableList<String> items = cachedListasAlimentos.get(grupo);
+        if (items == null) {
+            items = FXCollections.observableArrayList("");
+            cachedListasAlimentos.put(grupo, items);
+        }
+
+        // 6 filas por cada grupo
+        for (int r = 0; r < 6; r++) {
+            final int fila = r;
+            HBox row = new HBox(4);
+            row.setAlignment(Pos.CENTER_LEFT);
+
+            ComboBox<String> combo = new ComboBox<>();
+            combo.setPromptText("Elegir alimento...");
+            combo.setItems(items);
+            combo.setMaxWidth(Double.MAX_VALUE);
+            HBox.setHgrow(combo, Priority.ALWAYS);
+            estilizarControl(combo);
+
+            SpinnerValueFactory.IntegerSpinnerValueFactory svf = 
+                new SpinnerValueFactory.IntegerSpinnerValueFactory(0, quota, 1);
+            Spinner<Integer> spinner = new Spinner<>(svf);
+            spinner.setPrefWidth(50);
+            spinner.setEditable(true);
+            estilizarControl(spinner);
+
+            // Registrar slot para control de cuota
+            SlotControl slotCtrl = new SlotControl(combo, spinner, svf, comidaIdx, fila, colIndex);
+            List<SlotControl> listaSlots = controlesPorGrupo.computeIfAbsent(colIndex, k -> new ArrayList<>());
+            listaSlots.add(slotCtrl);
+
+            // Listener combo
+            combo.valueProperty().addListener((obs, oldV, newV) -> {
+                String nuevoAlim = newV != null ? newV : "";
+                int nuevaPorc = spinner.getValue() != null ? spinner.getValue() : 1;
+                actualizarNutrienteEnMatriz(comidaIdx, fila, colIndex, nuevoAlim, nuevaPorc);
+            });
+
+            // Listener spinner
+            spinner.valueProperty().addListener((obs, oldV, newV) -> {
+                String nuevoAlim = combo.getValue() != null ? combo.getValue() : "";
+                int nuevaPorc = newV != null ? newV : 1;
+                actualizarNutrienteEnMatriz(comidaIdx, fila, colIndex, nuevoAlim, nuevaPorc);
+            });
+
+            row.getChildren().addAll(combo, spinner);
+            rowsContainer.getChildren().add(row);
+        }
+
+        card.getChildren().addAll(headerBox, rowsContainer);
+        return card;
+    }
+
+    private void actualizarNutrienteEnMatriz(int comidaIdx, int fila, int colIndex, String nuevoAlim, int nuevaPorc) {
+        String[][] matAlim;
+        int[][] matPorc;
+
+        switch (comidaIdx) {
+            case 0:
+                matAlim = alimentosEnDesayuno;
+                matPorc = porcionesEnDesayuno;
+                break;
+            case 1:
+                matAlim = alimentosEnComida;
+                matPorc = porcionesEnComida;
+                break;
+            case 2:
+                matAlim = alimentosEnCena;
+                matPorc = porcionesEnCena;
+                break;
+            default:
+                matAlim = alimentosEnDesayuno;
+                matPorc = porcionesEnDesayuno;
+        }
+
+        if (fila < matAlim.length && colIndex < matAlim[0].length) {
+            matAlim[fila][colIndex] = nuevoAlim;
+            matPorc[fila][colIndex] = nuevaPorc;
+        }
+
+        // Aplicar la regla clínica de cuota diaria de porciones
+        actualizarCuotasPorGrupo(colIndex);
+
+        // Recalcular nutrientes globales
+        recalcularTotalesGenerales();
+    }
+
+    /**
+     * Aplica la regla clínica de porciones:
+     * Si se asignan X porciones a un alimento en cualquier comida, se restan del cupo diario disponible.
+     * Si el cupo restante llega a 0, todas las casillas vacías de ese grupo se deshabilitan.
+     * Al liberar porciones, las casillas se vuelven a habilitar automáticamente.
+     */
+    private void actualizarCuotasPorGrupo(int colIndex) {
+        int cuotaTotal = (colIndex < porcionesObjetivo.size()) ? porcionesObjetivo.get(colIndex) : 1;
+
+        int usadas = 0;
+        String[][][] matricesAlim = { alimentosEnDesayuno, alimentosEnComida, alimentosEnCena };
+        int[][][] matricesPorc = { porcionesEnDesayuno, porcionesEnComida, porcionesEnCena };
+
+        for (int m = 0; m < 3; m++) {
+            for (int r = 0; r < 6; r++) {
+                if (colIndex < matricesAlim[m][0].length) {
+                    String alim = matricesAlim[m][r][colIndex];
+                    int porc = matricesPorc[m][r][colIndex];
+                    if (alim != null && !alim.trim().isEmpty() && porc > 0) {
+                        usadas += porc;
+                    }
+                }
+            }
+        }
+
+        int restantes = cuotaTotal - usadas;
+
+        // Actualizar todos los controles del grupo
+        List<SlotControl> slots = controlesPorGrupo.get(colIndex);
+        if (slots != null) {
+            for (SlotControl sc : slots) {
+                int m = sc.comidaIdx;
+                int r = sc.filaIdx;
+                String alim = matricesAlim[m][r][colIndex];
+                int porc = matricesPorc[m][r][colIndex];
+
+                boolean tieneAlimento = (alim != null && !alim.trim().isEmpty());
+
+                if (tieneAlimento) {
+                    // El slot ocupado permite aumentar hasta su porción actual + restantes
+                    int maxPermitido = Math.max(1, porc + restantes);
+                    sc.svf.setMax(maxPermitido);
+                    sc.combo.setDisable(false);
+                    sc.spinner.setDisable(false);
+                } else {
+                    // Slot vacío: Si no quedan porciones, se deshabilita
+                    if (restantes <= 0) {
+                        sc.combo.setDisable(true);
+                        sc.spinner.setDisable(true);
+                        sc.combo.setPromptText("Límite (" + cuotaTotal + " porc.)");
+                    } else {
+                        sc.combo.setDisable(false);
+                        sc.spinner.setDisable(false);
+                        sc.combo.setPromptText("Elegir alimento...");
+                        sc.svf.setMax(Math.max(1, restantes));
+                        if (sc.spinner.getValue() > restantes) {
+                            sc.svf.setValue(Math.max(1, restantes));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Actualizar badge visual en el encabezado
+        Label badge = badgePorcionesPorGrupo.get(colIndex);
+        if (badge != null) {
+            badge.setText("Usadas: " + usadas + "/" + cuotaTotal + " porc.");
+            if (usadas == cuotaTotal) {
+                badge.setStyle("-fx-background-color: #E8F5E9; -fx-text-fill: #2E7D32; -fx-font-weight: bold; -fx-background-radius: 3; -fx-padding: 1 5;");
+            } else if (usadas > cuotaTotal) {
+                badge.setStyle("-fx-background-color: #FFEBEE; -fx-text-fill: #C62828; -fx-font-weight: bold; -fx-background-radius: 3; -fx-padding: 1 5;");
+            } else {
+                badge.setStyle("-fx-background-color: #FFF9C4; -fx-text-fill: #F57F17; -fx-font-weight: bold; -fx-background-radius: 3; -fx-padding: 1 5;");
+            }
+        }
+    }
+
+    // =========================================================================
+    // SECCIÓN DE RESUMEN: 'NUTRIENTES ACTUALES (g)' y 'PORCENTAJE DE NUTRIENTES (%)'
+    // =========================================================================
+
+    private VBox crearSeccionResumenNutrientes() {
+        VBox container = new VBox(6);
+        container.setAlignment(Pos.TOP_LEFT);
+
+        Label secTitle = new Label("3. RESUMEN DE NUTRIENTES CONSUMIDOS");
+        secTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11.5));
+        secTitle.setTextFill(PRIMARY_GREEN);
+
+        HBox tablesRow = new HBox(14);
+        tablesRow.setAlignment(Pos.CENTER);
+
+        // Tabla Izquierda: NUTRIENTES ACTUALES (g)
+        VBox cardGramos = crearTablaNutrientesGramos();
+        HBox.setHgrow(cardGramos, Priority.ALWAYS);
+
+        // Tabla Derecha: PORCENTAJE DE NUTRIENTES (%)
+        VBox cardPorcentajes = crearTablaPorcentajeNutrientes();
+        HBox.setHgrow(cardPorcentajes, Priority.ALWAYS);
+
+        tablesRow.getChildren().addAll(cardGramos, cardPorcentajes);
+        container.getChildren().addAll(secTitle, tablesRow);
+
+        return container;
+    }
+
+    private VBox crearTablaNutrientesGramos() {
+        VBox container = new VBox(5);
+        container.setStyle(
+            "-fx-background-color: white; " +
+            "-fx-border-color: #2E7D32; " +
+            "-fx-border-width: 2; " +
+            "-fx-border-radius: 8; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 6 8;"
+        );
+        container.setEffect(new DropShadow(5, 0, 2, Color.rgb(0, 0, 0, 0.04)));
+
+        Label titulo = new Label("NUTRIENTES ACTUALES (g)");
+        titulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11.5));
+        titulo.setTextFill(Color.WHITE);
+        titulo.setAlignment(Pos.CENTER);
+        titulo.setMaxWidth(Double.MAX_VALUE);
+        titulo.setStyle(
+            "-fx-background-color: #2E7D32; " +
+            "-fx-background-radius: 5; " +
+            "-fx-padding: 6 10;"
+        );
+
+        tablaNutrientesGramos = new TableView<>();
+        tablaNutrientesGramos.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+        TableColumn<NutrienteItem, String> nutCol = new TableColumn<>("Nutriente");
+        nutCol.setCellValueFactory(new PropertyValueFactory<>("nombre"));
+        nutCol.setPrefWidth(180);
+
+        TableColumn<NutrienteItem, String> cantCol = new TableColumn<>("Cantidad (g)");
+        cantCol.setCellValueFactory(new PropertyValueFactory<>("valor"));
+        cantCol.setPrefWidth(120);
+
+        tablaNutrientesGramos.getColumns().addAll(nutCol, cantCol);
+
+        // Altura fija exacta para 3 filas sin filas vacías
+        tablaNutrientesGramos.setFixedCellSize(26.0);
+        tablaNutrientesGramos.prefHeightProperty().bind(tablaNutrientesGramos.fixedCellSizeProperty().multiply(3).add(30));
+        tablaNutrientesGramos.minHeightProperty().bind(tablaNutrientesGramos.prefHeightProperty());
+        tablaNutrientesGramos.maxHeightProperty().bind(tablaNutrientesGramos.prefHeightProperty());
+
+        ObservableList<NutrienteItem> datos = FXCollections.observableArrayList(
+            new NutrienteItem("Hidratos de Carbono", "0.0"),
+            new NutrienteItem("Lipidos", "0.0"),
+            new NutrienteItem("Proteinas", "0.0")
+        );
+        tablaNutrientesGramos.setItems(datos);
+
+        container.getChildren().addAll(titulo, tablaNutrientesGramos);
+        return container;
+    }
+
+    private VBox crearTablaPorcentajeNutrientes() {
+        VBox container = new VBox(5);
+        container.setStyle(
+            "-fx-background-color: white; " +
+            "-fx-border-color: #388E3C; " +
+            "-fx-border-width: 2; " +
+            "-fx-border-radius: 8; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 6 8;"
+        );
+        container.setEffect(new DropShadow(5, 0, 2, Color.rgb(0, 0, 0, 0.04)));
+
+        Label titulo = new Label("PORCENTAJE DE NUTRIENTES (%)");
+        titulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11.5));
+        titulo.setTextFill(Color.WHITE);
+        titulo.setAlignment(Pos.CENTER);
+        titulo.setMaxWidth(Double.MAX_VALUE);
+        titulo.setStyle(
+            "-fx-background-color: #388E3C; " +
+            "-fx-background-radius: 5; " +
+            "-fx-padding: 6 10;"
+        );
+
+        tablaPorcentajes = new TableView<>();
+        tablaPorcentajes.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+        TableColumn<NutrienteItem, String> nutCol = new TableColumn<>("Nutriente");
+        nutCol.setCellValueFactory(new PropertyValueFactory<>("nombre"));
+        nutCol.setPrefWidth(180);
+
+        TableColumn<NutrienteItem, String> porcCol = new TableColumn<>("Porcentaje (%)");
+        porcCol.setCellValueFactory(new PropertyValueFactory<>("valor"));
+        porcCol.setPrefWidth(120);
+
+        tablaPorcentajes.getColumns().addAll(nutCol, porcCol);
+
+        // Altura fija exacta para 3 filas sin filas vacías
+        tablaPorcentajes.setFixedCellSize(26.0);
+        tablaPorcentajes.prefHeightProperty().bind(tablaPorcentajes.fixedCellSizeProperty().multiply(3).add(30));
+        tablaPorcentajes.minHeightProperty().bind(tablaPorcentajes.prefHeightProperty());
+        tablaPorcentajes.maxHeightProperty().bind(tablaPorcentajes.prefHeightProperty());
+
+        ObservableList<NutrienteItem> datos = FXCollections.observableArrayList(
+            new NutrienteItem("Hidratos de Carbono", "0.0%"),
+            new NutrienteItem("Lipidos", "0.0%"),
+            new NutrienteItem("Proteinas", "0.0%")
+        );
+        tablaPorcentajes.setItems(datos);
+
+        container.getChildren().addAll(titulo, tablaPorcentajes);
+        return container;
+    }
+
+    private HBox crearFooter() {
+        HBox footer = new HBox(14);
+        footer.setAlignment(Pos.CENTER);
+        footer.setStyle("-fx-background-color: #FFFFFF; -fx-border-color: #E0E8E3; -fx-border-width: 1.5 0 0 0;");
+        footer.setPadding(new Insets(8, 16, 10, 16));
+
+        Button exportarBtn = new Button("EXPORTAR PLAN A TXT");
+        exportarBtn.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11.5));
+        exportarBtn.setTextFill(Color.WHITE);
+        exportarBtn.setStyle(
+            "-fx-background-color: #2E7D32; " +
+            "-fx-background-radius: 14; " +
+            "-fx-padding: 6 18; " +
+            "-fx-cursor: hand; " +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 3, 0, 0, 1);"
+        );
+        exportarBtn.setOnAction(e -> exportarATXT());
+
+        Button limpiarBtn = new Button("LIMPIAR PLAN");
+        limpiarBtn.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11));
+        limpiarBtn.setTextFill(Color.WHITE);
+        limpiarBtn.setStyle(
+            "-fx-background-color: #C62828; " +
+            "-fx-background-radius: 14; " +
+            "-fx-padding: 6 14; " +
+            "-fx-cursor: hand; " +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 3, 0, 0, 1);"
+        );
+        limpiarBtn.setOnAction(e -> reiniciarPlan());
+
+        footer.getChildren().addAll(exportarBtn, limpiarBtn);
+        return footer;
+    }
+
+    private void reiniciarPlan() {
+        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmacion.setTitle("Confirmar Limpieza");
+        confirmacion.setHeaderText("¿Deseas reiniciar todas las comidas y platillos del plan?");
+        confirmacion.setContentText("Esta accion restablecera los datos del plan alimenticio a 0.");
+
+        confirmacion.showAndWait().ifPresent(res -> {
+            if (res == ButtonType.OK) {
+                inicializarEstructuras();
+                for (int i = 0; i < gruposEspecificos.size(); i++) {
+                    actualizarCuotasPorGrupo(i);
+                }
+                recalcularTotalesGenerales();
+                if (scrollPrincipal != null) {
+                    scrollPrincipal.setContent(crearPanelCentral().getContent());
+                }
+            }
+        });
+    }
+
+    // =========================================================================
+    // LÓGICA DE RECALCULO DE NUTRIENTES
+    // =========================================================================
+
+    private void recalcularTotalesGenerales() {
+        double sumHc = 0.0;
+        double sumLip = 0.0;
+        double sumProt = 0.0;
+
+        int nGrupos = gruposEspecificos.size();
+
+        // 1. Sumatoria de matrices de alimentos en las 3 comidas
+        String[][][] matricesAlim = { alimentosEnDesayuno, alimentosEnComida, alimentosEnCena };
+        int[][][] matricesPorc = { porcionesEnDesayuno, porcionesEnComida, porcionesEnCena };
+
+        for (int m = 0; m < 3; m++) {
+            String[][] matA = matricesAlim[m];
+            int[][] matP = matricesPorc[m];
+
+            for (int r = 0; r < 6; r++) {
+                for (int c = 0; c < nGrupos; c++) {
+                    if (r < matA.length && c < matA[0].length) {
+                        String alim = matA[r][c];
+                        int porc = matP[r][c];
+
+                        if (alim != null && !alim.trim().isEmpty() && porc > 0) {
+                            Map<String, Double> nut = nutrientesAlimentos.get(alim);
+                            if (nut == null) nut = nutrientesPlatillos.get(alim);
+
+                            if (nut != null) {
+                                sumHc += nut.getOrDefault("HC", 0.0) * porc;
+                                sumLip += nut.getOrDefault("Lípidos", 0.0) * porc;
+                                sumProt += nut.getOrDefault("Proteínas", 0.0) * porc;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Sumatoria de platillos tradicionales
+        for (List<PlatilloSeleccionado> slots : platillosEspecificosSeleccionados.values()) {
+            if (slots == null) continue;
+            for (PlatilloSeleccionado ps : slots) {
+                if (ps == null || ps.nombre == null || ps.nombre.trim().isEmpty() || ps.porciones <= 0) continue;
+
+                Map<String, Double> nut = nutrientesPlatillos.get(ps.nombre);
+                if (nut == null) nut = nutrientesAlimentos.get(ps.nombre);
+
+                if (nut != null) {
+                    sumHc += nut.getOrDefault("HC", 0.0) * ps.porciones;
+                    sumLip += nut.getOrDefault("Lípidos", 0.0) * ps.porciones;
+                    sumProt += nut.getOrDefault("Proteínas", 0.0) * ps.porciones;
+                }
+            }
+        }
+
+        totalHc = sumHc;
+        totalLipidos = sumLip;
+        totalProteinas = sumProt;
+
+        double totalKcal = (totalHc * 4.0) + (totalProteinas * 4.0) + (totalLipidos * 9.0);
+        totalKcalLabel.setText("ENERGIA CONSUMIDA: " + df.format(totalKcal) + " kcal");
+
+        // Actualizar Tabla 1: 'Nutrientes Actuales (g)'
+        if (tablaNutrientesGramos != null && !tablaNutrientesGramos.getItems().isEmpty()) {
+            ObservableList<NutrienteItem> items = tablaNutrientesGramos.getItems();
+            if (items.size() >= 3) {
+                items.get(0).setValor(df.format(totalHc));
+                items.get(1).setValor(df.format(totalLipidos));
+                items.get(2).setValor(df.format(totalProteinas));
+                tablaNutrientesGramos.refresh();
+            }
+        }
+
+        // Actualizar Tabla 2: 'Porcentaje de Nutrientes (%)'
+        if (tablaPorcentajes != null && !tablaPorcentajes.getItems().isEmpty()) {
+            ObservableList<NutrienteItem> pitems = tablaPorcentajes.getItems();
+            double totalNutrientes = totalHc + totalLipidos + totalProteinas;
+
+            double pctHc = totalNutrientes > 0 ? (totalHc / totalNutrientes) * 100.0 : 0.0;
+            double pctLip = totalNutrientes > 0 ? (totalLipidos / totalNutrientes) * 100.0 : 0.0;
+            double pctProt = totalNutrientes > 0 ? (totalProteinas / totalNutrientes) * 100.0 : 0.0;
+
+            if (pitems.size() >= 3) {
+                pitems.get(0).setValor(df.format(pctHc) + "%");
+                pitems.get(1).setValor(df.format(pctLip) + "%");
+                pitems.get(2).setValor(df.format(pctProt) + "%");
+                tablaPorcentajes.refresh();
+            }
+        }
+    }
+
+    // =========================================================================
+    // CARGA ASÍNCRONA DE DATOS (EXCEL Y CSV)
+    // =========================================================================
+
+    private void iniciarCargaAsincrona() {
+        Task<Void> tareaCarga = new Task<>() {
+            @Override
+            protected Void call() throws Exception {
+                updateMessage("Cargando base SMAE...");
+                cargarDatosExcel();
+                updateMessage("Cargando platillos mexicanos...");
+                cargarPlatillosCSV();
+                return null;
             }
         };
 
-        if (selectedEquivalentes != null && !selectedEquivalentes.isEmpty()) {
-            // Use the 'grupo' field first if available; otherwise try to map subgrupo
-            // reliably
-            LinkedHashSet<String> gruposSeleccionados = new LinkedHashSet<>();
-            for (var map : selectedEquivalentes) {
-                String grupoFrom = (String) map.getOrDefault("grupo", "");
-                String sub = (String) map.getOrDefault("subgrupo", "");
+        barraProgreso.progressProperty().bind(tareaCarga.progressProperty());
+        estadoCargaLabel.textProperty().bind(tareaCarga.messageProperty());
 
-                // prefer explicit grupo match
-                if (grupoFrom != null && !grupoFrom.isBlank()) {
-                    for (String gKey : datosExcel.keySet()) {
-                        if (gKey.equalsIgnoreCase(grupoFrom.trim())) {
-                            gruposSeleccionados.add(gKey);
-                            break;
-                        }
-                    }
-                    if (gruposSeleccionados.contains(grupoFrom))
-                        continue;
-                }
+        tareaCarga.setOnSucceeded(e -> {
+            estadoCargaLabel.textProperty().unbind();
+            estadoCargaLabel.setText("Base de datos lista");
+            barraProgreso.progressProperty().unbind();
+            barraProgreso.setVisible(false);
 
-                // try abbreviation or direct mapping
-                Optional<String> mapped = mapSubgrupoToGroupKey(grupoFrom, sub);
-                if (mapped.isPresent()) {
-                    gruposSeleccionados.add(mapped.get());
-                    continue;
-                }
-
-                // try exact matches against possible names
-                if (sub != null && !sub.isBlank()) {
-                    String trimmed = sub.trim();
-                    boolean matched = false;
-                    for (String grupoKey : nombreExcel.keySet()) {
-                        for (String p : nombreExcel.getOrDefault(grupoKey, List.of(grupoKey))) {
-                            if (p.equalsIgnoreCase(trimmed) || grupoKey.equalsIgnoreCase(trimmed)) {
-                                gruposSeleccionados.add(grupoKey);
-                                matched = true;
-                                break;
-                            }
-                        }
-                        if (matched)
-                            break;
-                    }
-                    if (matched)
-                        continue;
-
-                    // fallback: contains match but only if unique
-                    List<String> containsMatches = new ArrayList<>();
-                    for (String grupoKey : nombreExcel.keySet()) {
-                        for (String p : nombreExcel.getOrDefault(grupoKey, List.of(grupoKey))) {
-                            if (p.toLowerCase().contains(trimmed.toLowerCase())
-                                    || grupoKey.toLowerCase().contains(trimmed.toLowerCase())) {
-                                containsMatches.add(grupoKey);
-                                break;
-                            }
-                        }
-                    }
-                    if (containsMatches.size() == 1)
-                        gruposSeleccionados.add(containsMatches.get(0));
-                }
-            }
-            if (!gruposSeleccionados.isEmpty())
-                populateGrupos.accept(gruposSeleccionados);
-            else
-                populateGrupos.accept(datosExcel.keySet());
-        } else {
-            populateGrupos.accept(datosExcel.keySet());
-        }
-
-        // filter actions
-        mostrarBtn.setOnAction(e -> {
-            String val = comboSubgrupo.getEditor().getText();
-            if (val == null || val.trim().isEmpty())
-                return;
-            String trimmed = val.trim();
-            // find grupos whose nombreExcel entries contain this subgrupo
-            // (case-insensitive)
-            List<String> matches = new ArrayList<>();
-            for (String grupo : datosExcel.keySet()) {
-                List<String> posibles = nombreExcel.getOrDefault(grupo, List.of(grupo));
-                for (String p : posibles) {
-                    if (p.equalsIgnoreCase(trimmed) || p.toLowerCase().contains(trimmed.toLowerCase())) {
-                        matches.add(grupo);
-                        break;
+            // Actualizar todas las listas de ComboBoxes in-place
+            for (String grupo : gruposEspecificos) {
+                List<String> alimentos = datosExcel.get(grupo);
+                if (alimentos != null && !alimentos.isEmpty()) {
+                    ObservableList<String> obs = cachedListasAlimentos.get(grupo);
+                    if (obs != null) {
+                        List<String> items = new ArrayList<>();
+                        items.add("");
+                        items.addAll(alimentos);
+                        obs.setAll(items);
                     }
                 }
             }
-            if (!matches.isEmpty())
-                populateGrupos.accept(matches);
-        });
 
-        mostrarTodosBtn.setOnAction(e -> populateGrupos.accept(datosExcel.keySet()));
-
-        // Totals display
-        totalesLabelField = new Label("Totales: Kcal: 0 | HC: 0.0g | Proteínas: 0.0g | Lípidos: 0.0g");
-
-        // Summary table for selected items
-        summaryTableField = new TableView<>();
-        summaryTableField.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
-
-        TableColumn<Alimento, String> colNombre = new TableColumn<>("Nombre");
-        colNombre.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().nombre));
-
-        TableColumn<Alimento, String> colPorcion = new TableColumn<>("Porción");
-        colPorcion.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().porcion));
-
-        TableColumn<Alimento, String> colKcal = new TableColumn<>("Kcal");
-        colKcal.setCellValueFactory(
-                c -> new javafx.beans.property.SimpleStringProperty(String.valueOf(c.getValue().kcal)));
-
-        // NUEVA COLUMNA: Eliminar
-        TableColumn<Alimento, Void> colEliminar = new TableColumn<>("Eliminar");
-        colEliminar.setPrefWidth(80);
-        colEliminar.setCellFactory(param -> new TableCell<Alimento, Void>() {
-            private final Button deleteButton = new Button("X");
-
-            {
-                deleteButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;");
-                deleteButton.setOnAction(event -> {
-                    Alimento alimento = getTableView().getItems().get(getIndex());
-                    summaryTableField.getItems().remove(alimento);
-                    recomputeTotals();
-                });
-            }
-
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(deleteButton);
-                }
+            // Inicializar las cuotas de cada grupo
+            for (int i = 0; i < gruposEspecificos.size(); i++) {
+                actualizarCuotasPorGrupo(i);
             }
         });
 
-        summaryTableField.getColumns().addAll(colNombre, colPorcion, colKcal, colEliminar);
-
-        // totals state
-        final double[] totalHC = { 0.0 };
-        final double[] totalProt = { 0.0 };
-        final double[] totalLip = { 0.0 };
-        final double[] totalKcal = { 0.0 };
-
-        Button agregarBtn = new Button("Agregar seleccionados");
-        agregarBtn.setOnAction(e -> {
-            // collect checked items from persistent models (so selections persist)
-            List<ItemModel> selectedModels = new ArrayList<>();
-
-            for (var entry : grupoModelRows.entrySet()) {
-                for (ItemModel model : entry.getValue()) {
-                    if (model.isSelected()) {
-                        selectedModels.add(model);
-                        String nombre = model.getNombre();
-                        int por = model.getPorcion();
-
-                        // Lookup nutrients: first check Excel map, then CSV platillos
-                        Map<String, Double> nut = nutrientesAlimentos.getOrDefault(nombre,
-                                nutrientesPlatillos.getOrDefault(nombre, Map.of()));
-                        double hc = nut.getOrDefault("HC", 0.0) * por;
-                        double prot = nut.getOrDefault("Proteínas", 0.0) * por;
-                        double lip = nut.getOrDefault("Lípidos", 0.0) * por;
-                        double kcal = hc * 4 + prot * 4 + lip * 9;
-
-                        summaryTableField.getItems()
-                                .add(new Alimento(nombre, por + " porciones", (int) Math.round(kcal)));
-                    }
-                }
-            }
-
-            // LIMPIAR SELECCIONES: Desmarcar checkboxes y resetear porciones a 1
-            for (ItemModel model : selectedModels) {
-                model.setSelected(false);
-                model.setPorcion(1);
-            }
-
-            // recompute totals from summary table
-            recomputeTotals();
-        });
-        // Agregar botón para eliminar todos los alimentos de la tabla
-        Button eliminarTodosBtn = new Button("Eliminar todos");
-        eliminarTodosBtn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;");
-        eliminarTodosBtn.setOnAction(e -> {
-            summaryTableField.getItems().clear();
-            recomputeTotals();
-        });
-
-        box.getChildren().addAll(h, containerWrapper, agregarBtn, eliminarTodosBtn, totalesLabelField,
-                new Label("Resumen del plan:"), summaryTableField);
-        return box;
-    }
-
-    private void exportarATXTPlan() {
-        if (summaryTableField == null)
-            return;
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Exportar plan alimenticio");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Archivos de texto", "*.txt"));
-        fc.setInitialFileName("plan_alimenticio.txt");
-        java.io.File file = fc.showSaveDialog(null);
-        if (file == null)
-            return;
-        try (java.io.FileWriter fw = new java.io.FileWriter(file)) {
-            fw.write("PLAN ALIMENTICIO\n\n");
-            fw.write(totalesLabelField.getText() + "\n\n");
-            for (Alimento a : summaryTableField.getItems()) {
-                fw.write(String.format("%s - %s - %dkcal\n", a.nombre, a.porcion, a.kcal));
-            }
-            Alert info = new Alert(Alert.AlertType.INFORMATION);
-            info.setTitle("Exportado");
-            info.setHeaderText("Plan exportado");
-            info.setContentText("Archivo: " + file.getAbsolutePath());
-            info.showAndWait();
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-    }
-
-    // Map well-known subgrupo abbreviations or values from SistemaEquivalentes
-    // to the group keys used in nombreExcel.
-    private Optional<String> mapSubgrupoToGroupKey(String grupo, String subgrupo) {
-        if (subgrupo == null || subgrupo.isBlank())
-            return Optional.empty();
-        String s = subgrupo.trim();
-        // common AOA abbreviations
-        Map<String, String> abbrev = Map.of(
-                "MBAG", "Alimentos de origen animal - MBAG",
-                "BAG", "Alimentos de origen animal - BAG",
-                "MAG", "Alimentos de origen animal - MAG",
-                "AAG", "Alimentos de origen animal - AAG");
-        if (abbrev.containsKey(s.toUpperCase()))
-            return Optional.of(abbrev.get(s.toUpperCase()));
-
-        // Leche variants
-        if (s.equalsIgnoreCase("Descremada"))
-            return Optional.of("Leche - Descremada");
-        if (s.equalsIgnoreCase("Semi"))
-            return Optional.of("Leche - Semi");
-        if (s.equalsIgnoreCase("Entera"))
-            return Optional.of("Leche - Entera");
-        if (s.equalsIgnoreCase("Con Azucar"))
-            return Optional.of("Leche - Con Azucar");
-
-        // Cereales
-        if (s.equalsIgnoreCase("Sin Grasa") || s.equalsIgnoreCase("SG"))
-            return Optional.of("Cereales y tubérculos - Sin Grasa");
-        if (s.equalsIgnoreCase("Con Grasa") || s.equalsIgnoreCase("CG"))
-            return Optional.of("Cereales y tubérculos - Con Grasa");
-
-        // Azucares
-        if (s.equalsIgnoreCase("Sin Grasa"))
-            return Optional.of("Azucar - Sin grasa");
-        if (s.equalsIgnoreCase("Con Grasa"))
-            return Optional.of("Azucar - Con grasa");
-
-        // Aceites y grasas
-        if (s.equalsIgnoreCase("Sin Proteina"))
-            return Optional.of("Aceite y grasa - Sin proteina");
-        if (s.equalsIgnoreCase("Con Proteina"))
-            return Optional.of("Aceite y grasa - Con proteina");
-
-        // Leguminosas
-        if (s.equalsIgnoreCase("Leguminosas"))
-            return Optional.of("Leguminosas");
-
-        // Verduras y frutas
-        if (s.equalsIgnoreCase("Verduras"))
-            return Optional.of("Verduras");
-        if (s.equalsIgnoreCase("Frutas"))
-            return Optional.of("Frutas");
-
-        // Try direct matching against nombreExcel possible values
-        for (String grupoKey : nombreExcel.keySet()) {
-            for (String p : nombreExcel.getOrDefault(grupoKey, List.of())) {
-                if (p.equalsIgnoreCase(s) || p.toLowerCase().contains(s.toLowerCase()))
-                    return Optional.of(grupoKey);
-            }
-            if (grupoKey.equalsIgnoreCase(s))
-                return Optional.of(grupoKey);
-        }
-        return Optional.empty();
-    }
-
-    // Recompute totals from summaryTableField items (preferred over ad-hoc local
-    // sums)
-    private void recomputeTotals() {
-        double totalHC = 0, totalProt = 0, totalLip = 0, totalKcal = 0;
-        if (summaryTableField != null) {
-            for (Alimento a : summaryTableField.getItems()) {
-                String nombre = a.nombre;
-                int por = 1;
-                try {
-                    String p = a.porcion.split("\\s+")[0];
-                    por = Integer.parseInt(p);
-                } catch (Exception ignored) {
-                }
-                Map<String, Double> nut = nutrientesAlimentos.getOrDefault(nombre,
-                        nutrientesPlatillos.getOrDefault(nombre, Map.of()));
-                double hc = nut.getOrDefault("HC", 0.0) * por;
-                double prot = nut.getOrDefault("Proteínas", 0.0) * por;
-                double lip = nut.getOrDefault("Lípidos", 0.0) * por;
-                double kcal = hc * 4 + prot * 4 + lip * 9;
-                totalHC += hc;
-                totalProt += prot;
-                totalLip += lip;
-                totalKcal += kcal;
-            }
-        }
-        totalesLabelField.setText(String.format("Totales: Kcal: %.0f | HC: %.1fg | Proteínas: %.1fg | Lípidos: %.1fg",
-                totalKcal, totalHC, totalProt, totalLip));
-    }
-
-    // Load Platillos_mexicanos.csv and return list of platillo names
-    private List<String> cargarPlatillosCSV() {
-    List<String> lista = new ArrayList<>();
-    InputStream is = null;
-    try {
-        // Intentar diferentes ubicaciones posibles
-        is = getClass().getResourceAsStream("/data/Platillos_mexicanos.csv");
-        if (is == null) {
-            is = getClass().getClassLoader().getResourceAsStream("data/Platillos_mexicanos.csv");
-        }
-        if (is == null) {
-            try {
-                is = new java.io.FileInputStream("resources/data/Platillos_mexicanos.csv");
-            } catch (java.io.FileNotFoundException e) {
-                // Continuar al manejo de error
-            }
-        }
-        
-        if (is == null) {
-            System.err.println("ERROR: No se pudo encontrar el archivo Platillos_mexicanos.csv");
-            return lista;
-        }
-        
-        try (BufferedReader br = new BufferedReader(new java.io.InputStreamReader(is))) {
-            String linea;
-            while ((linea = br.readLine()) != null) {
-                linea = linea.trim();
-                if (linea.isEmpty())
-                    continue;
-                String[] partes = linea.split(",", -1);
-                if (partes[0].toLowerCase().contains("platillo"))
-                    continue;
-                if (partes.length < 1)
-                    continue;
-                String nombrePlatillo = partes[0].trim();
-                boolean esSubgrupo = true;
-                for (int i = 2; i <= 4; i++) {
-                    if (i < partes.length) {
-                        try {
-                            Double.parseDouble(partes[i].trim());
-                            esSubgrupo = false;
-                        } catch (Exception ignored) {
-                        }
-                    }
-                }
-                if (esSubgrupo)
-                    continue;
-                if (!nombrePlatillo.isEmpty()) {
-                    lista.add(nombrePlatillo);
-                    double prote = 0, lip = 0, hc = 0;
-                    try {
-                        prote = Double.parseDouble(partes[2].trim());
-                    } catch (Exception ignored) {
-                    }
-                    try {
-                        lip = Double.parseDouble(partes[3].trim());
-                    } catch (Exception ignored) {
-                    }
-                    try {
-                        hc = Double.parseDouble(partes[4].trim());
-                    } catch (Exception ignored) {
-                    }
-                    Map<String, Double> nutrientes = new HashMap<>();
-                    nutrientes.put("Proteínas", prote);
-                    nutrientes.put("Lípidos", lip);
-                    nutrientes.put("HC", hc);
-                    nutrientesPlatillos.put(nombrePlatillo, nutrientes);
-                }
-            }
-            System.out.println("✅ Archivo CSV cargado correctamente. " + lista.size() + " platillos encontrados.");
-        }
-    } catch (Exception e) {
-        System.err.println("❌ Error al cargar archivo CSV: " + e.getMessage());
-        e.printStackTrace();
-    } finally {
-        if (is != null) {
-            try { is.close(); } catch (Exception e) {}
-        }
-    }
-    return lista;
-}
-
-    private void mostrarPlatillosEspecificos(List<String> listaPlatillos) {
-        Stage modal = new Stage();
-        modal.setTitle("Platillos específicos");
-        VBox root = new VBox(8);
-        root.setPadding(new Insets(10));
-
-        // Table with platillo name, porciones spinner and checkbox
-        TableView<PlatilloRow> table = new TableView<>();
-        table.setEditable(true);
-        TableColumn<PlatilloRow, Boolean> selCol = new TableColumn<>("Sel");
-        selCol.setCellValueFactory(c -> c.getValue().selectedProperty());
-        selCol.setCellFactory(CheckBoxTableCell.forTableColumn(selCol));
-        selCol.setPrefWidth(40);
-
-        TableColumn<PlatilloRow, String> nombreCol = new TableColumn<>("Platillo");
-        nombreCol.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().nombre));
-        nombreCol.setPrefWidth(260);
-
-        TableColumn<PlatilloRow, Integer> porCol = new TableColumn<>("Porciones");
-        porCol.setCellValueFactory(c -> c.getValue().porcionProperty().asObject());
-        porCol.setPrefWidth(100);
-        porCol.setCellFactory(col -> new TableCell<PlatilloRow, Integer>() {
-            private final Spinner<Integer> spinner = new Spinner<>(1, 10, 1);
-
-            @Override
-            protected void updateItem(Integer item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty)
-                    setGraphic(null);
-                else {
-                    PlatilloRow row = getTableView().getItems().get(getIndex());
-                    spinner.getValueFactory().setValue(row.getPorcion());
-                    setGraphic(spinner);
-                    spinner.valueProperty().addListener((obs, ov, nv) -> row.setPorcion(nv));
-                }
+        tareaCarga.setOnFailed(e -> {
+            estadoCargaLabel.textProperty().unbind();
+            estadoCargaLabel.setText("Aviso: datos locales cargados");
+            barraProgreso.setVisible(false);
+            if (tareaCarga.getException() != null) {
+                tareaCarga.getException().printStackTrace();
             }
         });
 
-        table.getColumns().addAll(selCol, nombreCol, porCol);
-        ObservableList<PlatilloRow> rows = FXCollections.observableArrayList();
-        for (String p : listaPlatillos)
-            rows.add(new PlatilloRow(p));
-        table.setItems(rows);
-        table.setPrefHeight(420);
-
-        Button agregar = new Button("Agregar seleccionados");
-        agregar.setOnAction(e -> {
-    List<PlatilloRow> selectedRows = new ArrayList<>();
-    for (PlatilloRow r : table.getItems()) {
-        if (r.isSelected()) {
-            selectedRows.add(r);
-            String nombre = r.getNombre();
-            int por = r.getPorcion();
-            Map<String, Double> nut = nutrientesPlatillos.getOrDefault(nombre, Map.of());
-            double hc = nut.getOrDefault("HC", 0.0) * por;
-            double prot = nut.getOrDefault("Proteínas", 0.0) * por;
-            double lip = nut.getOrDefault("Lípidos", 0.0) * por;
-            double kcal = hc * 4 + prot * 4 + lip * 9;
-            summaryTableField.getItems().add(new Alimento(nombre, por + " porciones", (int) Math.round(kcal)));
-        }
-    }
-    
-    // LIMPIAR SELECCIONES en platillos - CORREGIDO
-    for (PlatilloRow r : selectedRows) {
-        r.selectedProperty().set(false); // Usar la propiedad directamente
-        r.setPorcion(1);
-    }
-    
-    recomputeTotals();
-    modal.close();
-});
-
-        root.getChildren().addAll(new Label("Platillos específicos (selecciona y ajusta porciones):"), table, agregar);
-        Scene scene = new Scene(root, 420, 560);
-        modal.setScene(scene);
-        modal.initOwner(null);
-        modal.show();
-    }
-
-    // Helper row for platillos modal
-    private static class PlatilloRow {
-        private final String nombre;
-        private final BooleanProperty selected = new SimpleBooleanProperty(false);
-        private final IntegerProperty porcion = new SimpleIntegerProperty(1);
-
-        PlatilloRow(String n) {
-            nombre = n;
-        }
-
-        public String getNombre() {
-            return nombre;
-        }
-
-        public BooleanProperty selectedProperty() {
-            return selected;
-        }
-
-        public boolean isSelected() {
-            return selected.get();
-        }
-
-        public IntegerProperty porcionProperty() {
-            return porcion;
-        }
-
-        public int getPorcion() {
-            return porcion.get();
-        }
-
-        public void setPorcion(int p) {
-            porcion.set(p);
-        }
-    }
-
-    // Create UI panel for a single grupo: list of foods with CheckBox and Spinner
-    private VBox createGrupoAlimentosPanel(String grupo, List<String> alimentos) {
-        VBox box = new VBox(6);
-        box.setPadding(new Insets(8));
-        box.setStyle(
-                "-fx-background-color: #ffffff; -fx-border-color: #e5e7eb; -fx-border-width: 1; -fx-background-radius:6; -fx-border-radius:6;");
-        // Compact: do not render inner title (Accordion shows the title). Use a
-        // scrollable list.
-        VBox list = new VBox(4);
-        // Ensure persistent models exist for this grupo
-        List<ItemModel> models = grupoModelRows.get(grupo);
-        if (models == null) {
-            models = new ArrayList<>();
-            for (String nombre : alimentos)
-                models.add(new ItemModel(nombre));
-            grupoModelRows.put(grupo, models);
-        }
-
-        List<ItemRow> rows = new ArrayList<>();
-        for (ItemModel model : models) {
-            ItemRow r = new ItemRow(model);
-            rows.add(r);
-            list.getChildren().add(r.hbox);
-        }
-        grupoItemRows.put(grupo, rows);
-        // Wrap in ScrollPane to limit vertical space
-        ScrollPane sp = new ScrollPane(list);
-        sp.setFitToWidth(true);
-        double pref = Math.min(250, Math.max(100, alimentos.size() * 26));
-        sp.setPrefViewportHeight(pref);
-        sp.setPrefHeight(pref);
-
-        box.getChildren().addAll(sp);
-        return box;
-    }
-
-    // Load datosExcel from SMAE_5aed-2.0.xlsx similarly to RecordatorioFX
-    private void inicializarMapeoExcel() {
-        // Full mapping copied from RecordatorioFX to match groups/subgrupos
-        nombreExcel.put("Verduras", List.of("Verduras"));
-        nombreExcel.put("Frutas", List.of("Frutas"));
-        nombreExcel.put("Cereales y tubérculos - Sin Grasa", List.of("Cereales SG"));
-        nombreExcel.put("Cereales y tubérculos - Con Grasa", List.of("Cereales CG"));
-        nombreExcel.put("Leguminosas", List.of("Leguminosas"));
-        nombreExcel.put("Alimentos de origen animal - MBAG",
-                List.of("AOA de muy bajo aporte de grasa", "AOA Muy Bajo"));
-        nombreExcel.put("Alimentos de origen animal - BAG", List.of("AOA de bajo aporte de grasa", "AOA Bajo"));
-        nombreExcel.put("Alimentos de origen animal - MAG", List.of("AOA de Moderado aporte de grasa", "AOA Moderado"));
-        nombreExcel.put("Alimentos de origen animal - AAG", List.of("AOA de Alto aporte de grasa", "AOA Alto"));
-        nombreExcel.put("Leche - Descremada", List.of("Leche Descremada"));
-        nombreExcel.put("Leche - Semi", List.of("Leche Semi"));
-        nombreExcel.put("Leche - Entera", List.of("Leche Entera"));
-        nombreExcel.put("Leche - Con Azucar", List.of("Leche Con Azucar"));
-        nombreExcel.put("Aceite y grasa - Sin proteina", List.of("Grasas Sin Proteina"));
-        nombreExcel.put("Aceite y grasa - Con proteina", List.of("Grasas Con Proteina"));
-        nombreExcel.put("Azucar - Sin grasa", List.of("Azucares sin grasas", "Azucares"));
-        nombreExcel.put("Azucar - Con grasa", List.of("Azucares con grasas", "Azucares Con Grasa"));
+        new Thread(tareaCarga).start();
     }
 
     private void cargarDatosExcel() {
-    InputStream is = null;
-    try {
-        // Intentar diferentes ubicaciones posibles
-        is = getClass().getResourceAsStream("/data/SMAE_5aed-2.0.xlsx");
-        if (is == null) {
-            is = getClass().getClassLoader().getResourceAsStream("data/SMAE_5aed-2.0.xlsx");
-        }
-        if (is == null) {
-            // Último intento: desde sistema de archivos
-            try {
-                is = new java.io.FileInputStream("resources/data/SMAE_5aed-2.0.xlsx");
-            } catch (java.io.FileNotFoundException e) {
-                // Continuar al manejo de error
+        InputStream is = null;
+        try {
+            is = getClass().getResourceAsStream("/data/SMAE_5aed-2.0.xlsx");
+            if (is == null) {
+                is = getClass().getClassLoader().getResourceAsStream("data/SMAE_5aed-2.0.xlsx");
             }
-        }
-        
-        if (is == null) {
-            System.err.println("ERROR: No se pudo encontrar el archivo SMAE_5aed-2.0.xlsx");
-            System.err.println("Buscado en:");
-            System.err.println("1. /data/SMAE_5aed-2.0.xlsx (classpath)");
-            System.err.println("2. data/SMAE_5aed-2.0.xlsx (classloader)");
-            System.err.println("3. resources/data/SMAE_5aed-2.0.xlsx (sistema archivos)");
-            return;
-        }
-        
-        try (Workbook workbook = new XSSFWorkbook(is)) {
-            int inicio = 3;
-            int fin = workbook.getNumberOfSheets() - 3;
-            for (int i = inicio; i < fin; i++) {
-                Sheet sheet = workbook.getSheetAt(i);
-                String nombreHoja = sheet.getSheetName().trim();
-                for (String grupo : nombreExcel.keySet()) {
-                    List<String> posibles = nombreExcel.getOrDefault(grupo, List.of(grupo));
-                    if (posibles.stream().anyMatch(s -> s.equalsIgnoreCase(nombreHoja))) {
-                        List<String> alimentos = new ArrayList<>();
-                        for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
-                            Row row = sheet.getRow(rowNum);
-                            if (row != null) {
-                                org.apache.poi.ss.usermodel.Cell celdaAlimento = row.getCell(1);
-                                if (celdaAlimento != null && celdaAlimento.getCellType() == CellType.STRING) {
-                                    String alimento = celdaAlimento.getStringCellValue().trim();
-                                    if (!alimento.isEmpty()) {
-                                        alimentos.add(alimento);
-                                        // read nutrients if present in expected columns
-                                        org.apache.poi.ss.usermodel.Cell celdaHc = row.getCell(9);
-                                        org.apache.poi.ss.usermodel.Cell celdaLip = row.getCell(10);
-                                        org.apache.poi.ss.usermodel.Cell celdaProt = row.getCell(11);
-                                        double hc = celdaHc != null && celdaHc.getCellType() == CellType.NUMERIC
-                                                ? celdaHc.getNumericCellValue()
-                                                : 0.0;
-                                        double lip = celdaLip != null && celdaLip.getCellType() == CellType.NUMERIC
-                                                ? celdaLip.getNumericCellValue()
-                                                : 0.0;
-                                        double prot = celdaProt != null && celdaProt.getCellType() == CellType.NUMERIC
-                                                ? celdaProt.getNumericCellValue()
-                                                : 0.0;
-                                        Map<String, Double> nut = new HashMap<>();
-                                        nut.put("HC", hc);
-                                        nut.put("Lípidos", lip);
-                                        nut.put("Proteínas", prot);
-                                        nutrientesAlimentos.put(alimento, nut);
+            if (is == null) {
+                try {
+                    is = new FileInputStream("resources/data/SMAE_5aed-2.0.xlsx");
+                } catch (FileNotFoundException ignored) {}
+            }
+            if (is == null) {
+                try {
+                    is = new FileInputStream("data/SMAE_5aed-2.0.xlsx");
+                } catch (FileNotFoundException ignored) {}
+            }
+
+            if (is == null) {
+                System.err.println("ERROR: No se encontro SMAE_5aed-2.0.xlsx");
+                return;
+            }
+
+            try (Workbook workbook = new XSSFWorkbook(is)) {
+                int inicio = 3;
+                int fin = workbook.getNumberOfSheets() - 3;
+
+                for (int i = inicio; i < fin; i++) {
+                    Sheet sheet = workbook.getSheetAt(i);
+                    String nombreHoja = sheet.getSheetName().trim();
+
+                    for (String grupo : gruposEspecificos) {
+                        if (coincideHojaConGrupo(nombreHoja, grupo)) {
+                            List<String> alimentos = new ArrayList<>();
+
+                            for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
+                                Row row = sheet.getRow(rowNum);
+                                if (row != null) {
+                                    org.apache.poi.ss.usermodel.Cell celdaAlimento = row.getCell(1);
+                                    if (celdaAlimento != null && celdaAlimento.getCellType() == CellType.STRING) {
+                                        String alimento = celdaAlimento.getStringCellValue().trim();
+                                        if (!alimento.isEmpty()) {
+                                            alimentos.add(alimento);
+
+                                            org.apache.poi.ss.usermodel.Cell celdaHc = row.getCell(9);
+                                            org.apache.poi.ss.usermodel.Cell celdaLipidos = row.getCell(10);
+                                            org.apache.poi.ss.usermodel.Cell celdaProteinas = row.getCell(11);
+
+                                            double hc = celdaHc != null && celdaHc.getCellType() == CellType.NUMERIC ? celdaHc.getNumericCellValue() : 0;
+                                            double lipidos = celdaLipidos != null && celdaLipidos.getCellType() == CellType.NUMERIC ? celdaLipidos.getNumericCellValue() : 0;
+                                            double proteinas = celdaProteinas != null && celdaProteinas.getCellType() == CellType.NUMERIC ? celdaProteinas.getNumericCellValue() : 0;
+
+                                            Map<String, Double> nut = new HashMap<>();
+                                            nut.put("HC", hc);
+                                            nut.put("Lípidos", lipidos);
+                                            nut.put("Proteínas", proteinas);
+
+                                            nutrientesAlimentos.put(alimento, nut);
+                                        }
                                     }
                                 }
                             }
+                            datosExcel.put(grupo, alimentos);
                         }
-                        datosExcel.put(grupo, alimentos);
                     }
                 }
             }
-            System.out.println("✅ Archivo Excel cargado correctamente");
-        }
-    } catch (Exception e) {
-        System.err.println("❌ Error al cargar archivo Excel: " + e.getMessage());
-        e.printStackTrace();
-    } finally {
-        if (is != null) {
-            try { is.close(); } catch (Exception e) {}
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (is != null) {
+                try { is.close(); } catch (Exception ignored) {}
+            }
         }
     }
-}
-    // UI helper for a single food row
-    // Model backing each selectable food row (persists selection and porcion)
-    private static class ItemModel {
-        private final String nombre;
-        private final BooleanProperty selected = new SimpleBooleanProperty(false);
-        private final IntegerProperty porcion = new SimpleIntegerProperty(1);
 
-        ItemModel(String nombre) {
+    private boolean coincideHojaConGrupo(String nombreHoja, String grupo) {
+        if (nombreHoja == null || grupo == null) return false;
+        String hojaNorm = normalizarTexto(nombreHoja);
+        String grupoNorm = normalizarTexto(grupo);
+
+        if (hojaNorm.equalsIgnoreCase(grupoNorm)) return true;
+
+        // Verduras
+        if (grupoNorm.contains("verdura") && hojaNorm.contains("verdura")) return true;
+
+        // Frutas
+        if (grupoNorm.contains("fruta") && hojaNorm.contains("fruta")) return true;
+
+        // Leguminosas
+        if (grupoNorm.contains("leguminosa") && hojaNorm.contains("leguminosa")) return true;
+
+        // Cereales
+        if (grupoNorm.contains("cereal")) {
+            if ((grupoNorm.contains("sin grasa") || grupoNorm.contains("sg")) && 
+                (hojaNorm.contains("sg") || hojaNorm.contains("sin grasa"))) return true;
+            if ((grupoNorm.contains("con grasa") || grupoNorm.contains("cg")) && 
+                (hojaNorm.contains("cg") || hojaNorm.contains("con grasa"))) return true;
+        }
+
+        // AOA / Animal
+        if (grupoNorm.contains("animal") || grupoNorm.contains("aoa")) {
+            if ((grupoNorm.contains("muy bajo") || grupoNorm.contains("mbag") || grupoNorm.contains("mrag")) &&
+                (hojaNorm.contains("muy bajo") || hojaNorm.contains("mbag") || hojaNorm.contains("mrag"))) return true;
+            if ((grupoNorm.contains("bajo") && !grupoNorm.contains("muy bajo")) &&
+                (hojaNorm.contains("bajo") && !hojaNorm.contains("muy bajo"))) return true;
+            if (grupoNorm.contains("moderado") && hojaNorm.contains("moderado")) return true;
+            if (grupoNorm.contains("alto") && hojaNorm.contains("alto")) return true;
+        }
+
+        // Leche
+        if (grupoNorm.contains("leche")) {
+            if (grupoNorm.contains("descremada") && !grupoNorm.contains("semi") && hojaNorm.contains("descremada")) return true;
+            if ((grupoNorm.contains("semi") || grupoNorm.contains("semidescremada")) && hojaNorm.contains("semi")) return true;
+            if (grupoNorm.contains("entera") && hojaNorm.contains("entera")) return true;
+            if (grupoNorm.contains("azucar") && hojaNorm.contains("azucar")) return true;
+        }
+
+        // Aceites y Grasas
+        if (grupoNorm.contains("grasa") || grupoNorm.contains("aceite")) {
+            if (grupoNorm.contains("sin proteina") && hojaNorm.contains("sin proteina")) return true;
+            if (grupoNorm.contains("con proteina") && hojaNorm.contains("con proteina")) return true;
+        }
+
+        // Azúcares
+        if (grupoNorm.contains("azucar") || grupoNorm.contains("azucares")) {
+            if (grupoNorm.contains("sin grasa") && (hojaNorm.equalsIgnoreCase("azucares") || hojaNorm.contains("sin grasa"))) return true;
+            if (grupoNorm.contains("con grasa") && hojaNorm.contains("con grasa")) return true;
+        }
+
+        return false;
+    }
+
+    private String normalizarTexto(String str) {
+        if (str == null) return "";
+        String nfd = Normalizer.normalize(str, Normalizer.Form.NFD);
+        Pattern pattern = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
+        return pattern.matcher(nfd).replaceAll("").trim().toLowerCase();
+    }
+
+    private void cargarPlatillosCSV() {
+        InputStream is = null;
+        try {
+            is = getClass().getResourceAsStream("/data/Platillos_mexicanos.csv");
+            if (is == null) {
+                is = getClass().getClassLoader().getResourceAsStream("data/Platillos_mexicanos.csv");
+            }
+            if (is == null) {
+                try {
+                    is = new FileInputStream("resources/data/Platillos_mexicanos.csv");
+                } catch (FileNotFoundException ignored) {}
+            }
+            if (is == null) {
+                try {
+                    is = new FileInputStream("data/Platillos_mexicanos.csv");
+                } catch (FileNotFoundException ignored) {}
+            }
+
+            if (is == null) return;
+
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
+                String linea;
+                List<String> platillosCargados = new ArrayList<>();
+
+                while ((linea = br.readLine()) != null) {
+                    linea = linea.trim();
+                    if (linea.isEmpty()) continue;
+
+                    String[] partes = linea.split(",", -1);
+                    if (partes[0].toLowerCase().contains("platillo") || partes.length < 6) continue;
+
+                    String nombrePlatillo = partes[0].trim();
+                    if (nombrePlatillo.isEmpty()) continue;
+
+                    try {
+                        double prote = Double.parseDouble(partes[2].trim());
+                        double lip = Double.parseDouble(partes[3].trim());
+                        double hc = Double.parseDouble(partes[4].trim());
+
+                        platillosCargados.add(nombrePlatillo);
+
+                        Map<String, Double> nut = new HashMap<>();
+                        nut.put("Proteínas", prote);
+                        nut.put("Lípidos", lip);
+                        nut.put("HC", hc);
+
+                        nutrientesPlatillos.put(nombrePlatillo, nut);
+                    } catch (NumberFormatException ignored) {}
+                }
+
+                Platform.runLater(() -> {
+                    listaPlatillos.setAll(platillosCargados);
+                });
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (is != null) {
+                try { is.close(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    private void mostrarPlatillosModal() {
+        Stage modal = new Stage();
+        modal.setTitle("Catalogo de Platillos Mexicanos");
+
+        VBox root = new VBox(10);
+        root.setPadding(new Insets(14));
+        root.setStyle("-fx-background-color: white;");
+
+        Label titulo = new Label("PLATILLOS MEXICANOS DISPONIBLES");
+        titulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+        titulo.setTextFill(PRIMARY_GREEN);
+
+        ListView<String> lista = new ListView<>(listaPlatillos);
+        lista.setPrefHeight(360);
+
+        Button cerrar = new Button("Cerrar");
+        cerrar.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11));
+        cerrar.setTextFill(Color.WHITE);
+        cerrar.setStyle("-fx-background-color: #2E7D32; -fx-background-radius: 5; -fx-padding: 5 14; -fx-cursor: hand;");
+        cerrar.setOnAction(e -> modal.close());
+
+        root.getChildren().addAll(titulo, lista, cerrar);
+
+        Scene scene = new Scene(root, 460, 460);
+        modal.setScene(scene);
+        modal.show();
+    }
+
+    // =========================================================================
+    // EXPORTACIÓN A TXT
+    // =========================================================================
+
+    private void exportarATXT() {
+        if (!hayDatosParaExportar()) {
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Sin datos");
+            alert.setHeaderText("No hay datos para exportar");
+            alert.setContentText("Por favor ingresa al menos un alimento o platillo antes de exportar el plan alimenticio.");
+            alert.showAndWait();
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Guardar Plan Alimenticio Personalizado");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Archivos de texto (*.txt)", "*.txt"));
+        fileChooser.setInitialFileName("plan_alimenticio.txt");
+
+        File file = fileChooser.showSaveDialog(null);
+        if (file != null) {
+            try (FileWriter writer = new FileWriter(file)) {
+                writer.write("================================================================================\n");
+                writer.write("           NUTRIENERGIA PRO - PLAN ALIMENTICIO PERSONALIZADO                    \n");
+                writer.write("================================================================================\n\n");
+
+                writer.write("1. EVALUACION DE MACRONUTRIENTES:\n");
+                writer.write("--------------------------------------------------------------------------------\n");
+                writer.write(String.format("%-24s %-16s %-16s %-16s\n", "NUTRIENTE", "OBJETIVO (g)", "ACTUAL (g)", "DIFERENCIA"));
+                writer.write(String.format("%-24s %-16s %-16s %-16s\n", "─".repeat(24), "─".repeat(16), "─".repeat(16), "─".repeat(16)));
+
+                writer.write(String.format("%-24s %-16.1f %-16.1f %+.1f g\n", "Hidratos de Carbono", idealHc, totalHc, (totalHc - idealHc)));
+                writer.write(String.format("%-24s %-16.1f %-16.1f %+.1f g\n", "Lipidos", idealLipidos, totalLipidos, (totalLipidos - idealLipidos)));
+                writer.write(String.format("%-24s %-16.1f %-16.1f %+.1f g\n", "Proteinas", idealProteinas, totalProteinas, (totalProteinas - idealProteinas)));
+
+                double totalKcal = (totalHc * 4) + (totalProteinas * 4) + (totalLipidos * 9);
+                writer.write(String.format("\nEnergia Total Consumida: %.1f kcal", totalKcal));
+                if (kcalObjetivo > 0) {
+                    writer.write(String.format(" (Meta: %.0f kcal)\n\n", kcalObjetivo));
+                } else {
+                    writer.write("\n\n");
+                }
+
+                exportarDetalleComida(writer, "DESAYUNO", alimentosEnDesayuno, porcionesEnDesayuno, platillosEspecificosSeleccionados.get("DESAYUNO"));
+                exportarDetalleComida(writer, "COMIDA", alimentosEnComida, porcionesEnComida, platillosEspecificosSeleccionados.get("COMIDA"));
+                exportarDetalleComida(writer, "CENA", alimentosEnCena, porcionesEnCena, platillosEspecificosSeleccionados.get("CENA"));
+
+                writer.write("================================================================================\n");
+                writer.write("Plan generado el: " + new Date() + "\n");
+                writer.write("================================================================================\n");
+
+                Alert info = new Alert(Alert.AlertType.INFORMATION);
+                info.setTitle("Plan Exportado");
+                info.setHeaderText("Archivo generado con exito");
+                info.setContentText("El plan alimenticio se ha guardado en:\n" + file.getAbsolutePath());
+                info.showAndWait();
+
+            } catch (IOException e) {
+                Alert err = new Alert(Alert.AlertType.ERROR);
+                err.setTitle("Error");
+                err.setHeaderText("No se pudo guardar el archivo");
+                err.setContentText(e.getMessage());
+                err.showAndWait();
+            }
+        }
+    }
+
+    private void exportarDetalleComida(FileWriter writer, String nombreComida, String[][] matA, int[][] matP, List<PlatilloSeleccionado> platillos) throws IOException {
+        writer.write("--------------------------------------------------------------------------------\n");
+        writer.write("DISTRIBUCION DE: " + nombreComida + "\n");
+        writer.write("--------------------------------------------------------------------------------\n");
+
+        boolean tienePlatillos = false;
+        if (platillos != null) {
+            for (PlatilloSeleccionado p : platillos) {
+                if (p != null && p.nombre != null && !p.nombre.isEmpty() && p.porciones > 0) {
+                    if (!tienePlatillos) {
+                        writer.write("• Platillos Tradicionales:\n");
+                        tienePlatillos = true;
+                    }
+                    writer.write(String.format("   - %s (%d porcion/es)\n", p.nombre, p.porciones));
+                }
+            }
+        }
+
+        boolean tieneAlimentos = false;
+        int nGrupos = gruposEspecificos.size();
+        for (int r = 0; r < 6; r++) {
+            for (int c = 0; c < nGrupos; c++) {
+                if (r < matA.length && c < matA[0].length) {
+                    String alim = matA[r][c];
+                    int porc = matP[r][c];
+                    if (alim != null && !alim.isEmpty() && porc > 0) {
+                        if (!tieneAlimentos) {
+                            writer.write("• Alimentos por Grupo Prescrito:\n");
+                            tieneAlimentos = true;
+                        }
+                        writer.write(String.format("   - %s: %s (%d porc.)\n", gruposEspecificos.get(c), alim, porc));
+                    }
+                }
+            }
+        }
+
+        if (!tienePlatillos && !tieneAlimentos) {
+            writer.write("  (Sin alimentos registrados en este tiempo de comida)\n");
+        }
+        writer.write("\n");
+    }
+
+    private boolean hayDatosParaExportar() {
+        int nGrupos = gruposEspecificos.size();
+        String[][][] matricesAlim = { alimentosEnDesayuno, alimentosEnComida, alimentosEnCena };
+
+        for (String[][] mat : matricesAlim) {
+            for (int r = 0; r < 6; r++) {
+                for (int c = 0; c < nGrupos; c++) {
+                    if (r < mat.length && c < mat[0].length) {
+                        if (mat[r][c] != null && !mat[r][c].trim().isEmpty()) return true;
+                    }
+                }
+            }
+        }
+
+        for (List<PlatilloSeleccionado> slots : platillosEspecificosSeleccionados.values()) {
+            if (slots != null) {
+                for (PlatilloSeleccionado ps : slots) {
+                    if (ps != null && ps.nombre != null && !ps.nombre.isEmpty() && ps.porciones > 0) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // =========================================================================
+    // CLASES AUXILIARES Y MODELOS
+    // =========================================================================
+
+    private static class SlotControl {
+        ComboBox<String> combo;
+        Spinner<Integer> spinner;
+        SpinnerValueFactory.IntegerSpinnerValueFactory svf;
+        int comidaIdx;
+        int filaIdx;
+        int colIdx;
+
+        SlotControl(ComboBox<String> combo, Spinner<Integer> spinner,
+                    SpinnerValueFactory.IntegerSpinnerValueFactory svf,
+                    int comidaIdx, int filaIdx, int colIdx) {
+            this.combo = combo;
+            this.spinner = spinner;
+            this.svf = svf;
+            this.comidaIdx = comidaIdx;
+            this.filaIdx = filaIdx;
+            this.colIdx = colIdx;
+        }
+    }
+
+    public static class PlatilloSeleccionado {
+        String nombre;
+        int porciones;
+
+        public PlatilloSeleccionado(String nombre, int porciones) {
             this.nombre = nombre;
-        }
-
-        public String getNombre() {
-            return nombre;
-        }
-
-        public BooleanProperty selectedProperty() {
-            return selected;
-        }
-
-        public IntegerProperty porcionProperty() {
-            return porcion;
-        }
-
-        public boolean isSelected() {
-            return selected.get();
-        }
-
-        public void setSelected(boolean v) {
-            selected.set(v);
-        }
-
-        public int getPorcion() {
-            return porcion.get();
-        }
-
-        public void setPorcion(int v) {
-            porcion.set(v);
+            this.porciones = porciones;
         }
     }
 
-    // UI helper for a single food row bound to a model
-    private static class ItemRow {
-        final ItemModel model;
-        final CheckBox checkBox;
-        final Spinner<Integer> spinner;
-        final HBox hbox;
+    public static class NutrienteItem {
+        private String nombre;
+        private String valor;
 
-        ItemRow(ItemModel model) {
-            this.model = model;
-            this.checkBox = new CheckBox(model.getNombre());
-            this.spinner = new Spinner<>(1, 10, model.getPorcion());
-            this.spinner.setPrefWidth(80);
-            // bind checkbox to model
-            this.checkBox.selectedProperty().bindBidirectional(model.selectedProperty());
-            // bind spinner value to model porcion
-            this.spinner.getValueFactory().valueProperty().bindBidirectional(model.porcionProperty().asObject());
-            Region spacer = new Region();
-            HBox.setHgrow(spacer, Priority.ALWAYS);
-            hbox = new HBox(8, checkBox, spacer, spinner);
-            hbox.setAlignment(Pos.CENTER_LEFT);
+        public NutrienteItem(String nombre, String valor) {
+            this.nombre = nombre;
+            this.valor = valor;
         }
-    }
 
-    private Region createResumenSection() {
-        VBox box = new VBox(8);
-    box.setPadding(new Insets(12));
-    box.setStyle("-fx-background-color: white; -fx-effect: dropshadow(two-pass-box, rgba(0,0,0,0.03), 8, 0, 0, 1); -fx-border-radius: 8; -fx-background-radius: 8;");
-
-    Label h = new Label("Resumen energético");
-    h.setFont(Font.font(FONT_FAMILY, 16));
-
-    HBox row = new HBox(16);
-    row.setAlignment(Pos.CENTER_LEFT);
-
-    VBox left = new VBox(6);
-    left.getChildren().addAll(new Label("TMB estimado:"), new Label("Calorías diarias objetivo:"));
-
-    VBox right = new VBox(6);
-    // Usar las Kcal diarias recibidas del Sistema de Equivalentes
-    right.getChildren().addAll(new Label(String.format("%,.0f kcal", kcalDiariasObjetivo)));
-
-    row.getChildren().addAll(left, right);
-    box.getChildren().addAll(h, row);
-    return box;
-}
-
-    // Clase interna simple para la tabla
-    public static class Alimento {
-        public final String nombre;
-        public final String porcion;
-        public final int kcal;
-
-        public Alimento(String n, String p, int k) {
-            nombre = n;
-            porcion = p;
-            kcal = k;
-        }
+        public String getNombre() { return nombre; }
+        public void setNombre(String nombre) { this.nombre = nombre; }
+        public String getValor() { return valor; }
+        public void setValor(String valor) { this.valor = valor; }
     }
 
     public static void main(String[] args) {
